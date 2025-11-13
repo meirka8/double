@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,17 +20,19 @@ import (
 
 var (
 	// Styles
-	docStyle           = lipgloss.NewStyle().Margin(1, 2)
-	activeStyle        = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true).BorderForeground(lipgloss.Color("63"))
-	inactiveStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true).BorderForeground(lipgloss.Color("240"))
-	cursorStyle        = lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("255"))
-	selectionStyle     = lipgloss.NewStyle().Background(lipgloss.Color("220")).Foreground(lipgloss.Color("0"))
-	dirStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
-	fileStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	statusBar          = lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("250")).Padding(0, 1)
-	statusBarActive    = lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("255")).Padding(0, 1)
-	inputPromptStyle   = lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("255")).Padding(0, 1)
-	confirmPromptStyle = lipgloss.NewStyle().Background(lipgloss.Color("166")).Foreground(lipgloss.Color("255")).Padding(0, 1)
+	docStyle             = lipgloss.NewStyle().Margin(1, 2)
+	activeStyle          = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true).BorderForeground(lipgloss.Color("63"))
+	inactiveStyle        = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true).BorderForeground(lipgloss.Color("240"))
+	cursorStyle          = lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("255"))
+	selectionStyle       = lipgloss.NewStyle().Background(lipgloss.Color("220")).Foreground(lipgloss.Color("0"))
+	dirStyle             = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
+	fileStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	statusBar            = lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("250")).Padding(0, 1)
+	statusBarActive      = lipgloss.NewStyle().Background(lipgloss.Color("63")).Foreground(lipgloss.Color("255")).Padding(0, 1)
+	inputPromptStyle     = lipgloss.NewStyle().Background(lipgloss.Color("235")).Foreground(lipgloss.Color("255")).Padding(0, 1)
+	confirmPromptStyle   = lipgloss.NewStyle().Background(lipgloss.Color("166")).Foreground(lipgloss.Color("255")).Padding(0, 1)
+	overwritePromptStyle = lipgloss.NewStyle().Background(lipgloss.Color("202")).Foreground(lipgloss.Color("0")).Padding(0, 1)
+	previewStyle         = lipgloss.NewStyle().Border(lipgloss.DoubleBorder(), true).BorderForeground(lipgloss.Color("205")).Padding(1, 2)
 )
 
 // file represents a file or directory entry.
@@ -39,6 +43,12 @@ type file struct {
 	Mode    fs.FileMode
 	ModTime time.Time
 	IsDir   bool
+}
+
+// fileConflict represents a file that already exists at the destination.
+type fileConflict struct {
+	Source      file
+	Destination string
 }
 
 // pane represents one of the two file listing panels.
@@ -58,14 +68,22 @@ type pane struct {
 
 // model is the main application model.
 type model struct {
-	leftPane         pane
-	rightPane        pane
-	quitting         bool
-	err              error
-	isCreatingFolder bool
-	folderNameInput  string
-	isDeleting       bool
-	fileToDelete     file
+	leftPane             pane
+	rightPane            pane
+	quitting             bool
+	err                  error
+	isCreatingFolder     bool
+	folderNameInput      string
+	isDeleting           bool
+	fileToDelete         file
+	isConfirmingOverwrite bool
+	overwriteConflicts   []fileConflict
+	overwriteAll         bool
+	skipAll              bool
+	isMoving             bool // To know if the operation is a move or copy
+	isPreviewing         bool
+	previewContent       string
+	previewFilePath      string
 }
 
 // initialModel creates a new model with default state.
@@ -94,6 +112,30 @@ func initialModel() model {
 // Init initializes the application.
 func (m model) Init() tea.Cmd {
 	return tea.Batch(m.leftPane.loadDirectoryCmd(), m.rightPane.loadDirectoryCmd())
+}
+
+// Update handles messages and updates the model.
+func (m *model) processOverwriteConflicts() tea.Cmd {
+	if m.skipAll {
+		m.overwriteConflicts = nil // Skip all remaining
+	}
+
+	if len(m.overwriteConflicts) == 0 {
+		m.isConfirmingOverwrite = false
+		m.overwriteAll = false
+		m.skipAll = false
+		return nil
+	}
+
+	var filesToOperate []file
+	for _, conflict := range m.overwriteConflicts {
+		filesToOperate = append(filesToOperate, conflict.Source)
+	}
+
+	if m.isMoving {
+		return moveFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true)
+	}
+	return copyFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true)
 }
 
 // Update handles messages and updates the model.
@@ -145,6 +187,54 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+	} else if m.isConfirmingOverwrite {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "y", "Y":
+				// Overwrite the current file and process the rest
+				conflict := m.overwriteConflicts[0]
+				m.overwriteConflicts = m.overwriteConflicts[1:]
+				var operationCmd tea.Cmd
+				if m.isMoving {
+					operationCmd = moveFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true)
+				} else {
+					operationCmd = copyFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true)
+				}
+				return m, tea.Sequence(operationCmd, m.processOverwriteConflicts())
+
+			case "n", "N":
+				// Skip the current file and process the rest
+				m.overwriteConflicts = m.overwriteConflicts[1:]
+				return m, m.processOverwriteConflicts()
+
+			case "a", "A":
+				m.overwriteAll = true
+				return m, m.processOverwriteConflicts()
+
+			case "s", "S": // Skip All
+				m.skipAll = true
+				return m, m.processOverwriteConflicts()
+
+			case "esc":
+				m.isConfirmingOverwrite = false
+				m.overwriteConflicts = nil
+				m.overwriteAll = false
+				m.skipAll = false
+				return m, nil
+			}
+		}
+	} else if m.isPreviewing {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "esc", "q":
+				m.isPreviewing = false
+				m.previewContent = ""
+				m.previewFilePath = ""
+				return m, nil
+			}
+		}
 	} else { // Normal operation mode
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -160,7 +250,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rightPane.active = !m.rightPane.active
 				return m, nil
 			case "alt+v", "f3", "\x1b[13~": // alt+v, f3
-				// TODO: Preview
+				activePane := &m.leftPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+				}
+				if len(activePane.files) > 0 {
+					selectedFile := activePane.files[activePane.cursor]
+					if !selectedFile.IsDir {
+						m.isPreviewing = true
+						m.previewFilePath = selectedFile.Path
+						return m, previewFileCmd(selectedFile.Path)
+					}
+				}
+				return m, nil
 			case "alt+c", "f5", "\x1b[15~": // alt+c, f5
 				sourcePane := &m.leftPane
 				destPane := &m.rightPane
@@ -173,8 +275,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					files = []file{sourcePane.files[sourcePane.cursor]}
 				}
 				if len(files) > 0 {
+					m.isMoving = false // It's a copy operation
 					sourcePane.selected = make(map[string]struct{}) // Clear selection
-					return m, copyFilesCmd(files, destPane.path)
+					return m, copyFilesCmd(files, destPane.path, false)
 				}
 				return m, nil
 			case "alt+m", "f6", "\x1b[17~": // alt+m, f6
@@ -189,8 +292,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					files = []file{sourcePane.files[sourcePane.cursor]}
 				}
 				if len(files) > 0 {
+					m.isMoving = true // It's a move operation
 					sourcePane.selected = make(map[string]struct{}) // Clear selection
-					return m, moveFilesCmd(files, destPane.path)
+					return m, moveFilesCmd(files, destPane.path, false)
 				}
 				return m, nil
 			case "alt+n", "f7", "\x1b[18~": // alt+n, f7
@@ -268,6 +372,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case fileConflictMsg:
+		m.isConfirmingOverwrite = true
+		m.overwriteConflicts = msg.Conflicts
+		return m, nil
 	case fileOperationMsg: // For copy/move operations
 		if msg.err != nil {
 			m.err = msg.err
@@ -277,10 +385,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		return m, nil
+	case previewReadyMsg:
+		m.previewContent = msg.Content
+		if msg.Err != nil {
+			m.err = msg.Err
+		}
+		return m, nil
 	}
 
 	// Delegate updates to active pane only if not in an operation mode
-	if !m.isCreatingFolder && !m.isDeleting {
+	if !m.isCreatingFolder && !m.isDeleting && !m.isConfirmingOverwrite && !m.isPreviewing {
 		if m.leftPane.active {
 			m.leftPane, cmd = m.leftPane.update(msg)
 		} else {
@@ -294,6 +408,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	if m.quitting {
 		return "Exiting Double Manager. Goodbye!\n"
+	}
+
+	if m.isPreviewing {
+		return previewStyle.Width(m.leftPane.width*2 + 2).Height(m.leftPane.height*2 + 2).Render(m.previewContent)
 	}
 
 	leftView := paneView(m.leftPane)
@@ -312,6 +430,12 @@ func (m model) statusBarView() string {
 
 	if m.isDeleting {
 		return confirmPromptStyle.Render(fmt.Sprintf("Delete %s? (y/n)", m.fileToDelete.Name))
+	}
+
+	if m.isConfirmingOverwrite {
+		if len(m.overwriteConflicts) > 0 {
+			return overwritePromptStyle.Render(fmt.Sprintf("Overwrite %s? (y/n/A/s)", m.overwriteConflicts[0].Source.Name))
+		}
 	}
 
 	activePane := m.leftPane
@@ -416,6 +540,15 @@ type fileOperationMsg struct { // For copy/move
 	err error
 }
 
+type fileConflictMsg struct {
+	Conflicts []fileConflict
+}
+
+type previewReadyMsg struct {
+	Content string
+	Err     error
+}
+
 // Commands
 func (p pane) loadDirectoryCmd() tea.Cmd {
 	return func() tea.Msg {
@@ -451,8 +584,21 @@ func deleteFileCmd(f file) tea.Cmd {
 	}
 }
 
-func copyFilesCmd(sourceFiles []file, destPath string) tea.Cmd {
+func copyFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
 	return func() tea.Msg {
+		if !force {
+			var conflicts []fileConflict
+			for _, srcFile := range sourceFiles {
+				destFilePath := filepath.Join(destPath, srcFile.Name)
+				if _, err := os.Stat(destFilePath); !os.IsNotExist(err) {
+					conflicts = append(conflicts, fileConflict{Source: srcFile, Destination: destFilePath})
+				}
+			}
+			if len(conflicts) > 0 {
+				return fileConflictMsg{Conflicts: conflicts}
+			}
+		}
+
 		for _, srcFile := range sourceFiles {
 			destFilePath := filepath.Join(destPath, srcFile.Name)
 			if srcFile.IsDir {
@@ -471,8 +617,21 @@ func copyFilesCmd(sourceFiles []file, destPath string) tea.Cmd {
 	}
 }
 
-func moveFilesCmd(sourceFiles []file, destPath string) tea.Cmd {
+func moveFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
 	return func() tea.Msg {
+		if !force {
+			var conflicts []fileConflict
+			for _, srcFile := range sourceFiles {
+				destFilePath := filepath.Join(destPath, srcFile.Name)
+				if _, err := os.Stat(destFilePath); !os.IsNotExist(err) {
+					conflicts = append(conflicts, fileConflict{Source: srcFile, Destination: destFilePath})
+				}
+			}
+			if len(conflicts) > 0 {
+				return fileConflictMsg{Conflicts: conflicts}
+			}
+		}
+
 		for _, srcFile := range sourceFiles {
 			destFilePath := filepath.Join(destPath, srcFile.Name)
 			err := os.Rename(srcFile.Path, destFilePath)
@@ -481,6 +640,28 @@ func moveFilesCmd(sourceFiles []file, destPath string) tea.Cmd {
 			}
 		}
 		return fileOperationMsg{err: nil}
+	}
+}
+
+func previewFileCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return previewReadyMsg{Err: fmt.Errorf("could not read file: %w", err)}
+		}
+
+		// Basic check for binary content
+		if !utf8.Valid(content) || bytes.Contains(content, []byte{0}) {
+			return previewReadyMsg{Content: fmt.Sprintf("--- Binary file: %s ---", filepath.Base(path))}
+		}
+
+		// Limit preview size
+		const maxPreviewSize = 1024 * 100 // 100KB
+		if len(content) > maxPreviewSize {
+			return previewReadyMsg{Content: fmt.Sprintf("--- File too large for preview (%s), showing first %d bytes ---\n%s", filepath.Base(path), maxPreviewSize, content[:maxPreviewSize])}
+		}
+
+		return previewReadyMsg{Content: string(content)}
 	}
 }
 
