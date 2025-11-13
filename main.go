@@ -68,22 +68,24 @@ type pane struct {
 
 // model is the main application model.
 type model struct {
-	leftPane             pane
-	rightPane            pane
-	quitting             bool
-	err                  error
-	isCreatingFolder     bool
-	folderNameInput      string
-	isDeleting           bool
-	fileToDelete         file
+	leftPane              pane
+	rightPane             pane
+	quitting              bool
+	err                   error
+	isCreatingFolder      bool
+	folderNameInput       string
+	isDeleting            bool
+	fileToDelete          file
 	isConfirmingOverwrite bool
-	overwriteConflicts   []fileConflict
-	overwriteAll         bool
-	skipAll              bool
-	isMoving             bool // To know if the operation is a move or copy
-	isPreviewing         bool
-	previewContent       string
-	previewFilePath      string
+	overwriteConflicts    []fileConflict
+	overwriteAll          bool
+	skipAll               bool
+	isMoving              bool // To know if the operation is a move or copy
+	isPreviewing          bool
+	previewContent        string
+	previewFilePath       string
+	previewWidth          int
+	previewHeight         int
 }
 
 // initialModel creates a new model with default state.
@@ -259,6 +261,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !selectedFile.IsDir {
 						m.isPreviewing = true
 						m.previewFilePath = selectedFile.Path
+						m.previewWidth = activePane.width
+						m.previewHeight = activePane.height
 						return m, previewFileCmd(selectedFile.Path)
 					}
 				}
@@ -327,7 +331,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		// Handle window resizing
-		paneHeight := msg.Height - 3 // Adjust for status bar and header
+		paneHeight := msg.Height - 1 // Adjust for status bar
 		paneWidth := msg.Width/2 - 2
 		m.leftPane.height = paneHeight
 		m.rightPane.height = paneHeight
@@ -411,7 +415,14 @@ func (m model) View() string {
 	}
 
 	if m.isPreviewing {
-		return previewStyle.Width(m.leftPane.width*2 + 2).Height(m.leftPane.height*2 + 2).Render(m.previewContent)
+		var finalView string
+		previewView := previewStyle.Width(m.previewWidth).Height(m.previewHeight).Render(m.previewContent)
+		if m.leftPane.active {
+			finalView = lipgloss.JoinHorizontal(lipgloss.Top, previewView, paneView(m.rightPane))
+		} else {
+			finalView = lipgloss.JoinHorizontal(lipgloss.Top, paneView(m.leftPane), previewView)
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, finalView, m.statusBarView())
 	}
 
 	leftView := paneView(m.leftPane)
@@ -478,11 +489,11 @@ func paneView(p pane) string {
 	if p.cursor < p.viewportY {
 		p.viewportY = p.cursor
 	}
-	if p.cursor >= p.viewportY+p.height {
-		p.viewportY = p.cursor - p.height + 1
+	if p.cursor >= p.viewportY+p.height-1 {
+		p.viewportY = p.cursor - p.height + 2
 	}
 
-	for i := p.viewportY; i < len(p.files) && i < p.viewportY+p.height; i++ {
+	for i := p.viewportY; i < len(p.files) && i < p.viewportY+p.height-1; i++ {
 		f := p.files[i]
 		line := " " + f.Name
 		if f.IsDir {
