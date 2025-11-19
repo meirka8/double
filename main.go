@@ -782,6 +782,18 @@ func readDirectory(dirPath string) ([]file, error) {
 		return files[i].Name < files[j].Name
 	})
 
+	// Add ".." entry if not root
+	if filepath.Dir(dirPath) != dirPath {
+		parent := file{
+			Name:    "..",
+			Path:    filepath.Dir(dirPath),
+			IsDir:   true,
+			Mode:    os.ModeDir,
+			ModTime: time.Now(), // Dummy time
+		}
+		files = append([]file{parent}, files...)
+	}
+
 	return files, nil
 }
 
