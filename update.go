@@ -152,8 +152,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !selectedFile.IsDir {
 						m.isPreviewing = true
 						m.previewFilePath = selectedFile.Path
-						m.previewWidth = activePane.width
-						m.previewHeight = activePane.height
+						m.previewWidth = activePane.width - 4
+						m.previewHeight = activePane.height - 2
 						return m, previewFileCmd(selectedFile.Path)
 					}
 				}
