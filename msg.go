@@ -31,3 +31,7 @@ type previewReadyMsg struct {
 	Content string
 	Err     error
 }
+
+type clipboardCopiedMsg struct {
+	err error
+}

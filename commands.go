@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"unicode/utf8"
 
+	"github.com/atotto/clipboard"
+	"github.com/aymanbagabas/go-osc52/v2"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -124,5 +126,20 @@ func previewFileCmd(path string) tea.Cmd {
 		}
 
 		return previewReadyMsg{Content: string(content)}
+	}
+}
+
+func copyToClipboardCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		err := clipboard.WriteAll(text)
+		if err != nil {
+			// Fallback to OSC 52
+			osc52.New(text).WriteTo(os.Stderr)
+			// We don't return the error if OSC 52 "succeeds" (it just writes to stderr)
+			// But strictly speaking we don't know if the terminal handled it.
+			// However, it's better than failing.
+			return clipboardCopiedMsg{err: nil}
+		}
+		return clipboardCopiedMsg{err: err}
 	}
 }

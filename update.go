@@ -205,6 +205,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.fileToDelete = activePane.files[activePane.cursor]
 				}
 				return m, nil
+			case "alt+p":
+				activePane := &m.leftPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+				}
+				files := getFilesFromSelected(*activePane)
+				if len(files) == 0 && len(activePane.files) > 0 {
+					files = []file{activePane.files[activePane.cursor]}
+				}
+				if len(files) > 0 {
+					var paths []string
+					for _, f := range files {
+						paths = append(paths, f.Path)
+					}
+					return m, copyToClipboardCmd(strings.Join(paths, "\n"))
+				}
+				return m, nil
 			}
 		}
 	}
