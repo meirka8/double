@@ -14,10 +14,10 @@ import (
 )
 
 // Commands
-func (p pane) loadDirectoryCmd() tea.Cmd {
+func (p pane) loadDirectoryCmd(focusPath string) tea.Cmd {
 	return func() tea.Msg {
 		files, err := readDirectory(p.path)
-		return directoryLoadedMsg{paneID: p.id, files: files, err: err}
+		return directoryLoadedMsg{paneID: p.id, files: files, err: err, focusPath: focusPath}
 	}
 }
 

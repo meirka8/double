@@ -2,9 +2,10 @@ package main
 
 // Messages
 type directoryLoadedMsg struct {
-	paneID int
-	files  []file
-	err    error
+	paneID    int
+	files     []file
+	err       error
+	focusPath string
 }
 
 type fileOpenedMsg struct {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"path/filepath"
 	"strings"
 
@@ -285,12 +286,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle messages that are always processed
 	switch msg := msg.(type) {
 	case directoryLoadedMsg:
+		log.Printf("Directory loaded for pane %d. FocusPath: '%s'", msg.paneID, msg.focusPath)
 		if msg.paneID == m.leftPane.id {
 			m.leftPane.files = msg.files
 			m.leftPane.err = msg.err
+			if msg.focusPath != "" {
+				log.Printf("Focusing path: %s", msg.focusPath)
+				for i, f := range m.leftPane.files {
+					log.Printf("Comparing with: %s", f.Path)
+					if f.Path == msg.focusPath {
+						log.Printf("Match found at index %d", i)
+						m.leftPane.cursor = i
+						// Adjust viewport to make cursor visible
+						if m.leftPane.cursor >= m.leftPane.viewportY+m.leftPane.height-2 {
+							m.leftPane.viewportY = m.leftPane.cursor - m.leftPane.height + 3
+						}
+						break
+					}
+				}
+			}
 		} else if msg.paneID == m.rightPane.id {
 			m.rightPane.files = msg.files
 			m.rightPane.err = msg.err
+			if msg.focusPath != "" {
+				for i, f := range m.rightPane.files {
+					if f.Path == msg.focusPath {
+						m.rightPane.cursor = i
+						// Adjust viewport to make cursor visible
+						if m.rightPane.cursor >= m.rightPane.viewportY+m.rightPane.height-2 {
+							m.rightPane.viewportY = m.rightPane.cursor - m.rightPane.height + 3
+						}
+						break
+					}
+				}
+			}
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -313,9 +342,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// Reload directory in active pane
 			if m.leftPane.active {
-				return m, m.leftPane.loadDirectoryCmd()
+				return m, m.leftPane.loadDirectoryCmd("")
 			} else {
-				return m, m.rightPane.loadDirectoryCmd()
+				return m, m.rightPane.loadDirectoryCmd("")
 			}
 		}
 		return m, nil
@@ -334,9 +363,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Reload directory in active pane
 			if m.leftPane.active {
-				return m, m.leftPane.loadDirectoryCmd()
+				return m, m.leftPane.loadDirectoryCmd("")
 			} else {
-				return m, m.rightPane.loadDirectoryCmd()
+				return m, m.rightPane.loadDirectoryCmd("")
 			}
 		}
 		return m, nil
@@ -349,7 +378,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		} else {
 			// Reload both source and destination panes
-			cmds := []tea.Cmd{m.leftPane.loadDirectoryCmd(), m.rightPane.loadDirectoryCmd()}
+			cmds := []tea.Cmd{m.leftPane.loadDirectoryCmd(""), m.rightPane.loadDirectoryCmd("")}
 			return m, tea.Batch(cmds...)
 		}
 		return m, nil
@@ -405,14 +434,34 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 					p.cursor = len(p.files) - 1
 				}
 			}
+		case "backspace", "h":
+			p.searchQuery = "" // Clear search on navigation
+			parentPath := filepath.Dir(p.path)
+			log.Printf("Backspace/h pressed. Current: %s, Parent: %s", p.path, parentPath)
+			if parentPath != p.path { // Ensure we don't go above root
+				currentPath := p.path
+				p.path = parentPath
+				p.cursor = 0 // Reset cursor when going up (will be fixed by focusPath)
+				log.Printf("Navigating up. FocusPath: %s", currentPath)
+				return p, p.loadDirectoryCmd(currentPath)
+			}
 		case "enter":
 			p.searchQuery = "" // Clear search on navigation
 			if len(p.files) > 0 {
 				selectedFile := p.files[p.cursor]
 				if selectedFile.IsDir {
+					// Check if it's the parent directory entry ".."
+					if selectedFile.Name == ".." {
+						currentPath := p.path
+						p.path = selectedFile.Path
+						p.cursor = 0
+						log.Printf("Entering '..'. FocusPath: %s", currentPath)
+						return p, p.loadDirectoryCmd(currentPath)
+					}
+
 					p.path = selectedFile.Path
 					p.cursor = 0 // Reset cursor when entering a new directory
-					return p, p.loadDirectoryCmd()
+					return p, p.loadDirectoryCmd("")
 				} else {
 					return p, openFileCmd(selectedFile.Path)
 				}

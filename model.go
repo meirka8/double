@@ -88,5 +88,5 @@ func initialModel() model {
 
 // Init initializes the application.
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.leftPane.loadDirectoryCmd(), m.rightPane.loadDirectoryCmd())
+	return tea.Batch(m.leftPane.loadDirectoryCmd(""), m.rightPane.loadDirectoryCmd(""))
 }
