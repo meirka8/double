@@ -133,7 +133,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "down", "j":
-				m.previewScrollY++
+				// Calculate max scroll
+				innerWidth := m.previewWidth - 6
+				innerHeight := m.previewHeight - 4
+				wrappedLines := calculateWrappedLines(m.previewContent, innerWidth)
+				maxScroll := len(wrappedLines) - innerHeight
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+
+				if m.previewScrollY < maxScroll {
+					m.previewScrollY++
+				}
 				return m, nil
 			case "pgup":
 				m.previewScrollY -= m.previewHeight
@@ -142,15 +153,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "pgdown":
+				// Calculate max scroll
+				innerWidth := m.previewWidth - 6
+				innerHeight := m.previewHeight - 4
+				wrappedLines := calculateWrappedLines(m.previewContent, innerWidth)
+				maxScroll := len(wrappedLines) - innerHeight
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+
 				m.previewScrollY += m.previewHeight
+				if m.previewScrollY > maxScroll {
+					m.previewScrollY = maxScroll
+				}
 				return m, nil
 			case "home", "g":
 				m.previewScrollY = 0
 				return m, nil
 			case "end", "G":
-				// We don't know the max height here easily without wrapping logic,
-				// so we set it to a very large number and let View clamp it.
-				m.previewScrollY = 1000000
+				// Calculate max scroll
+				innerWidth := m.previewWidth - 6
+				innerHeight := m.previewHeight - 4
+				wrappedLines := calculateWrappedLines(m.previewContent, innerWidth)
+				maxScroll := len(wrappedLines) - innerHeight
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+				m.previewScrollY = maxScroll
 				return m, nil
 			}
 		}

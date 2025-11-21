@@ -22,10 +22,10 @@ func (m model) View() string {
 		innerHeight := m.previewHeight - 4
 
 		// Wrap content to fit width first
-		wrappedContent := lipgloss.NewStyle().Width(innerWidth).Render(m.previewContent)
+		wrappedLines := calculateWrappedLines(m.previewContent, innerWidth)
 
 		// Truncate to fit height with scrolling
-		contentLines := strings.Split(wrappedContent, "\n")
+		contentLines := wrappedLines
 		maxScroll := len(contentLines) - innerHeight
 		if maxScroll < 0 {
 			maxScroll = 0
