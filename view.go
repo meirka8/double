@@ -115,14 +115,6 @@ func paneView(p pane) string {
 	var s strings.Builder
 	s.WriteString(p.path + "\n")
 
-	// Ensure viewport is within bounds
-	if p.cursor < p.viewportY {
-		p.viewportY = p.cursor
-	}
-	if p.cursor >= p.viewportY+p.height-2 {
-		p.viewportY = p.cursor - p.height + 3
-	}
-
 	for i := p.viewportY; i < len(p.files) && i < p.viewportY+p.height-2; i++ {
 		f := p.files[i]
 		line := " " + f.Name

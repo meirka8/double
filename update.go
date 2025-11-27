@@ -488,5 +488,14 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 			}
 		}
 	}
+
+	// Ensure viewport is within bounds
+	if p.cursor < p.viewportY {
+		p.viewportY = p.cursor
+	}
+	if p.cursor >= p.viewportY+p.height-2 {
+		p.viewportY = p.cursor - p.height + 3
+	}
+
 	return p, nil
 }
