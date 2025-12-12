@@ -35,28 +35,12 @@ func (m *model) processOverwriteConflicts() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	// Track modifiers (basic implementation)
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		logDebug("Key received: %s (Type: %v)", msg.String(), msg.Type)
-		// Reset modifiers on every key press for now, as we don't have reliable release events
-		// unless we are in a specific mode.
-		// We will set them based on the current key string if possible.
-		// Note: This is a best-effort approximation.
-		m.modifierState.Ctrl = false
-		m.modifierState.Alt = false
-		m.modifierState.Shift = false
-
-		if strings.Contains(msg.String(), "ctrl") {
-			m.modifierState.Ctrl = true
-		}
-		if strings.Contains(msg.String(), "alt") {
-			m.modifierState.Alt = true
-		}
-		if strings.Contains(msg.String(), "shift") || (len(msg.String()) == 1 && msg.String() == strings.ToUpper(msg.String()) && msg.String() != strings.ToLower(msg.String())) {
-			m.modifierState.Shift = true
-		}
-	}
+	// Track modifiers (basic implementation) - REMOVED FUNCTIONALITY
+	// switch msg := msg.(type) {
+	// case tea.KeyMsg:
+	// ...
+	// }
+	// User requested to remove this functionality for now.
 
 	// Handle operations that take precedence over normal key presses
 	if m.isCreatingFolder {
@@ -342,7 +326,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		// Handle window resizing
-		paneHeight := msg.Height - 1 - 2 // Adjust for status bar and borders
+		// Height includes:
+		// - Status bar (1 line)
+		// - Hint panel (approx 3 lines: 1 text + 2 border)
+		// - Borders (2 lines for top/bottom of pane?)
+		// Let's account for 4 lines of overhead separate from pane borders.
+		paneHeight := msg.Height - 1 - 4 // Adjust for status bar (1) and hints (3) and maybe some breathing room?
+		// Previously it was -1 -2. 1 for status, 2 for borders?
+		// If we have top border and bottom border on panes, that's inside paneView rendering usually or accounted for here.
+		// Let's try reducing height by 5 total to be safe: 1 (status) + 3 (hints).
+		// Wait, original was `msg.Height - 1 - 2`.
+		// If hints are new, we need to subtract their height.
+		// Hint panel height = 3 (1 text + 2 border).
+		// So we need to subtract 3 more than before.
+		// New calculation: msg.Height - 1 (status) - 3 (hints) - 2 (pane borders overhead if any, previously 2)
+		// Total subtraction: 6.
+		paneHeight = msg.Height - 6
 		paneWidth := msg.Width/2 - 2
 		m.leftPane.height = paneHeight
 		m.rightPane.height = paneHeight
@@ -407,7 +406,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	default:
-		logDebug("Unknown message: %T", msg)
+		// logDebug("Unknown message: %T", msg)
 	}
 
 	// Delegate updates to active pane only if not in an operation mode

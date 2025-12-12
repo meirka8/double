@@ -145,24 +145,17 @@ func paneView(p pane) string {
 
 func (m model) hintsView() string {
 	// Modifiers
-	ctrlStyle := modifierStyle
-	if m.modifierState.Ctrl {
-		ctrlStyle = modifierActiveStyle
-	}
-	altStyle := modifierStyle
+	// We primarily care about Alt as per user request
+	altStyle := altChipInactiveStyle
 	if m.modifierState.Alt {
-		altStyle = modifierActiveStyle
-	}
-	shiftStyle := modifierStyle
-	if m.modifierState.Shift {
-		shiftStyle = modifierActiveStyle
+		altStyle = altChipStyle
 	}
 
-	modifiers := lipgloss.JoinHorizontal(lipgloss.Left,
-		ctrlStyle.Render("Ctrl"),
-		altStyle.Render("Alt"),
-		shiftStyle.Render("Shift"),
-	)
+	// Check other modifiers just in case we need to show them or they affect hints
+	// But user asked to "leave only alt".
+	// We will just show "Alt" chip, highlighted if pressed.
+
+	modifiers := altStyle.Render("Alt")
 
 	// Hints
 	var hints []string
@@ -187,9 +180,9 @@ func (m model) hintsView() string {
 		}
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Left,
+	return lipgloss.JoinHorizontal(lipgloss.Center, // Alignment check
 		modifiers,
-		"  ", // Spacer
+		// No spacer needed if margins are handled by styles
 		lipgloss.JoinHorizontal(lipgloss.Left, hints...),
 	)
 }
