@@ -11,18 +11,21 @@ A minimalistic two-pane TUI file manager in Go with Norton-style commands and "s
 ## Features
 
 *   **Two-pane layout:** A classic two-pane file manager interface.
-*   **File navigation:** Navigate through the file system using the arrow keys, `home`, `end`, `pgup`, `pgdown`, and `backspace`.
-*   **Parent Navigation:** Navigate to the parent directory using `backspace`, `h`, or by selecting the `..` entry. The cursor position is preserved on the exited folder.
-*   **File selection:** Select multiple files using the `insert` key.
+*   **File navigation:** Navigate through the file system using the arrow keys, `home`, `end`, `pgup`, and `pgdown`.
+*   **Parent Navigation:** Navigate to the parent directory by selecting the `..` entry.
+*   **File selection:** Select multiple files using `Alt+I` or `Control+I`.
 *   **File operations:**
-    *   **Copy (F5):** Copy selected files from the active pane to the inactive pane.
-    *   **Move (F6):** Move selected files from the active pane to the inactive pane.
-    *   **Delete (F8):** Delete the selected file or folder.
-    *   **New Folder (F7):** Create a new folder in the active pane.
-    *   **Copy Path (Alt+P):** Copy the full path of selected files to the system clipboard.
+    *   **Copy (Alt+C / F5):** Copy selected files from the active pane to the inactive pane.
+    *   **Move (Alt+M / F6):** Move selected files from the active pane to the inactive pane.
+    *   **Delete (Alt+D / F8):** Delete the selected file or folder.
+    *   **New Folder (Alt+N / F7):** Create a new folder in the active pane.
+    *   **Copy Path (Alt+P / F9):** Copy the full path of selected files to the system clipboard.
+    *   **Preview (Alt+V / F3):** Preview the selected file.
+    *   **Quit (Alt+Q / F10):** Quit the application.
+    *   **Force Quit (Ctrl+C):** Force quit the application.
 *   **Overwrite confirmation:** A confirmation prompt is displayed when a file operation would overwrite an existing file.
 *   **Active search:** Start typing to search for files in the active pane.
-*   **File preview (F3):** Preview the content of the selected file in a full-screen overlay.
+*   **File preview:** Preview the content of the selected file in a full-screen overlay.
     *   **Scrollable:** Use `up`, `down`, `pgup`, `pgdown`, `home`, and `end` to scroll through the preview content.
 
 ## Technical Details

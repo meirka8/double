@@ -35,11 +35,22 @@ func (m *model) processOverwriteConflicts() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	// Track modifiers (basic implementation) - REMOVED FUNCTIONALITY
+	// switch msg := msg.(type) {
+	// case tea.KeyMsg:
+	// ...
+	// }
+	// User requested to remove this functionality for now.
+
 	// Handle operations that take precedence over normal key presses
 	if m.isCreatingFolder {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			switch msg.String() {
+			key := msg.String()
+			if mapKey, ok := m.aliasMap[key]; ok {
+				key = mapKey
+			}
+			switch key {
 			case "enter":
 				activePane := &m.leftPane
 				if m.rightPane.active {
@@ -186,18 +197,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else { // Normal operation mode
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			switch msg.String() {
-			case "alt+q", "f10", "\x1b[21~": // alt+q, f10
+			key := msg.String()
+			if mapKey, ok := m.aliasMap[key]; ok {
+				key = mapKey
+			}
+			switch key {
+			case m.keyMap.Quit.Key: // Quit
 				m.quitting = true
 				return m, tea.Quit
-			case "ctrl+c": // Always allow ctrl+c to quit
+			case m.keyMap.ForceQuit.Key: // Force Quit
 				m.quitting = true
 				return m, tea.Quit
-			case "tab":
+			case m.keyMap.SwitchPane.Key:
 				m.leftPane.active = !m.leftPane.active
 				m.rightPane.active = !m.rightPane.active
 				return m, nil
-			case "alt+v", "f3", "\x1b[13~": // alt+v, f3
+			case m.keyMap.Preview.Key: // Preview
 				activePane := &m.leftPane
 				if m.rightPane.active {
 					activePane = &m.rightPane
@@ -214,7 +229,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, nil
-			case "alt+c", "f5", "\x1b[15~": // alt+c, f5
+			case m.keyMap.Copy.Key: // Copy
 				sourcePane := &m.leftPane
 				destPane := &m.rightPane
 				if m.rightPane.active {
@@ -231,7 +246,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, copyFilesCmd(files, destPane.path, false)
 				}
 				return m, nil
-			case "alt+m", "f6", "\x1b[17~": // alt+m, f6
+			case m.keyMap.Move.Key: // Move
 				sourcePane := &m.leftPane
 				destPane := &m.rightPane
 				if m.rightPane.active {
@@ -248,10 +263,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, moveFilesCmd(files, destPane.path, false)
 				}
 				return m, nil
-			case "alt+n", "f7", "\x1b[18~": // alt+n, f7
+			case m.keyMap.NewFolder.Key: // New Folder
 				m.isCreatingFolder = true
 				return m, nil
-			case "alt+d", "f8", "\x1b[19~": // alt+d, f8
+			case m.keyMap.Delete.Key: // Delete
 				activePane := &m.leftPane
 				if m.rightPane.active {
 					activePane = &m.rightPane
@@ -261,7 +276,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.fileToDelete = activePane.files[activePane.cursor]
 				}
 				return m, nil
-			case "alt+p":
+			case m.keyMap.CopyPath.Key:
 				activePane := &m.leftPane
 				if m.rightPane.active {
 					activePane = &m.rightPane
@@ -319,7 +334,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		// Handle window resizing
-		paneHeight := msg.Height - 1 - 2 // Adjust for status bar and borders
+		// Height includes:
+		// - Status bar (1 line)
+		// - Hint panel (approx 3 lines: 1 text + 2 border)
+		// - Borders (2 lines for top/bottom of pane?)
+		// Let's account for 4 lines of overhead separate from pane borders.
+		paneHeight := msg.Height - 1 - 4 // Adjust for status bar (1) and hints (3) and maybe some breathing room?
+		// Previously it was -1 -2. 1 for status, 2 for borders?
+		// If we have top border and bottom border on panes, that's inside paneView rendering usually or accounted for here.
+		// Let's try reducing height by 5 total to be safe: 1 (status) + 3 (hints).
+		// Wait, original was `msg.Height - 1 - 2`.
+		// If hints are new, we need to subtract their height.
+		// Hint panel height = 3 (1 text + 2 border).
+		// So we need to subtract 3 more than before.
+		// New calculation: msg.Height - 1 (status) - 3 (hints) - 2 (pane borders overhead if any, previously 2)
+		// Total subtraction: 6.
+		paneHeight = msg.Height - 6
 		paneWidth := msg.Width/2 - 2
 		m.leftPane.height = paneHeight
 		m.rightPane.height = paneHeight
@@ -383,6 +413,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 		}
 		return m, nil
+	default:
+		// logDebug("Unknown message: %T", msg)
 	}
 
 	// Delegate updates to active pane only if not in an operation mode
@@ -428,15 +460,6 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 				if p.cursor >= len(p.files) {
 					p.cursor = len(p.files) - 1
 				}
-			}
-		case "backspace", "h":
-			p.searchQuery = "" // Clear search on navigation
-			parentPath := filepath.Dir(p.path)
-			if parentPath != p.path { // Ensure we don't go above root
-				currentPath := p.path
-				p.path = parentPath
-				p.cursor = 0 // Reset cursor when going up (will be fixed by focusPath)
-				return p, p.loadDirectoryCmd(currentPath)
 			}
 		case "enter":
 			p.searchQuery = "" // Clear search on navigation

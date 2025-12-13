@@ -26,3 +26,4 @@ double_manager
 # OS
 .DS_Store
 Thumbs.db
+debug.log
