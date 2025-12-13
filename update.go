@@ -461,15 +461,6 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 					p.cursor = len(p.files) - 1
 				}
 			}
-		case "backspace", "h":
-			p.searchQuery = "" // Clear search on navigation
-			parentPath := filepath.Dir(p.path)
-			if parentPath != p.path { // Ensure we don't go above root
-				currentPath := p.path
-				p.path = parentPath
-				p.cursor = 0 // Reset cursor when going up (will be fixed by focusPath)
-				return p, p.loadDirectoryCmd(currentPath)
-			}
 		case "enter":
 			p.searchQuery = "" // Clear search on navigation
 			if len(p.files) > 0 {
