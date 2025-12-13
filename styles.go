@@ -36,11 +36,11 @@ var (
 				Padding(0, 1).
 				MarginRight(1)
 
-	hintKeyStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Bold(true)
-	hintDescStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	hintKeyStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Bold(true).Background(lipgloss.Color("235")).Padding(0, 1)
+	hintDescStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Background(lipgloss.Color("233")).Padding(0, 1)
 	hintCardStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("238")).
-			Padding(0, 1).
-			MarginRight(1)
+		// Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("238")).
+		Padding(1, 1).
+		MarginRight(1)
 )
