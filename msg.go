@@ -36,3 +36,13 @@ type previewReadyMsg struct {
 type clipboardCopiedMsg struct {
 	err error
 }
+
+type progressMsg struct {
+	TotalBytes     int64
+	CurrentBytes   int64
+	TotalFiles     int
+	ProcessedFiles int
+	CurrentFile    string
+	Done           bool
+	Err            error
+}

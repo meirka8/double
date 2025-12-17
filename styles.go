@@ -43,4 +43,20 @@ var (
 		BorderForeground(lipgloss.Color("238")).
 		Padding(1, 1).
 		MarginRight(1)
+
+	// Progress Styles
+	progressContainerStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("63")).
+				Padding(0, 1).
+				MarginTop(1).
+				Align(lipgloss.Right)
+
+	progressBarStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("255")).
+				Background(lipgloss.Color("63"))
+
+	progressTrackStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")).
+				Background(lipgloss.Color("235"))
 )

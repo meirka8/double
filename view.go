@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -62,6 +63,7 @@ func (m model) View() string {
 		lipgloss.JoinHorizontal(lipgloss.Top, leftView, rightView),
 		m.statusBarView(),
 		m.hintsView(),
+		m.progressView(),
 	)
 }
 
@@ -185,4 +187,71 @@ func (m model) hintsView() string {
 		// No spacer needed if margins are handled by styles
 		lipgloss.JoinHorizontal(lipgloss.Left, hints...),
 	)
+}
+
+func (m model) progressView() string {
+	if !m.progressState.IsActive {
+		return ""
+	}
+
+	width := m.leftPane.width + m.rightPane.width
+
+	// Calculate progress
+	var percent float64
+	if m.progressState.TotalBytes > 0 {
+		percent = float64(m.progressState.WrittenBytes) / float64(m.progressState.TotalBytes)
+	} else if m.progressState.TotalFiles > 0 {
+		// Fallback to file count if bytes not available or 0
+		percent = float64(m.progressState.ProcessedFiles) / float64(m.progressState.TotalFiles)
+	}
+
+	if percent > 1.0 {
+		percent = 1.0
+	}
+
+	// Calculate speed
+	duration := time.Since(m.progressState.StartTime)
+	var speed string
+	if duration.Seconds() > 0 {
+		bytesPerSec := float64(m.progressState.WrittenBytes) / duration.Seconds()
+		speed = fmt.Sprintf("%s/s", formatBytes(int64(bytesPerSec)))
+	}
+
+	// Format status text
+	var statusText string
+	if m.progressState.TotalFiles > 1 {
+		statusText = fmt.Sprintf("Copying %d/%d files (%s) - %s", m.progressState.ProcessedFiles, m.progressState.TotalFiles, speed, m.progressState.CurrentFile)
+	} else {
+		statusText = fmt.Sprintf("Copying %s (%s)", m.progressState.CurrentFile, speed)
+	}
+
+	// Create progress bar
+	barWidth := 20
+	filledWidth := int(percent * float64(barWidth))
+	if filledWidth > barWidth {
+		filledWidth = barWidth
+	}
+
+	bar := progressBarStyle.Render(strings.Repeat(" ", filledWidth)) +
+		progressTrackStyle.Render(strings.Repeat(" ", barWidth-filledWidth))
+
+	content := lipgloss.JoinVertical(lipgloss.Right,
+		statusText,
+		bar,
+	)
+
+	return progressContainerStyle.Width(width).Render(content)
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }

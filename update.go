@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -26,9 +27,9 @@ func (m *model) processOverwriteConflicts() tea.Cmd {
 	}
 
 	if m.isMoving {
-		return moveFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true)
+		return moveFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true, m.progressChan)
 	}
-	return copyFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true)
+	return copyFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true, m.progressChan)
 }
 
 // Update handles messages and updates the model.
@@ -101,9 +102,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.overwriteConflicts = m.overwriteConflicts[1:]
 				var operationCmd tea.Cmd
 				if m.isMoving {
-					operationCmd = moveFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true)
+					operationCmd = moveFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true, m.progressChan)
 				} else {
-					operationCmd = copyFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true)
+					operationCmd = copyFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true, m.progressChan)
 				}
 				return m, tea.Sequence(operationCmd, m.processOverwriteConflicts())
 
@@ -243,7 +244,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(files) > 0 {
 					m.isMoving = false                              // It's a copy operation
 					sourcePane.selected = make(map[string]struct{}) // Clear selection
-					return m, copyFilesCmd(files, destPane.path, false)
+					return m, copyFilesCmd(files, destPane.path, false, m.progressChan)
 				}
 				return m, nil
 			case m.keyMap.Move.Key: // Move
@@ -260,7 +261,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(files) > 0 {
 					m.isMoving = true                               // It's a move operation
 					sourcePane.selected = make(map[string]struct{}) // Clear selection
-					return m, moveFilesCmd(files, destPane.path, false)
+					return m, moveFilesCmd(files, destPane.path, false, m.progressChan)
 				}
 				return m, nil
 			case m.keyMap.NewFolder.Key: // New Folder
@@ -398,7 +399,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isConfirmingOverwrite = true
 		m.overwriteConflicts = msg.Conflicts
 		return m, nil
-	case fileOperationMsg: // For copy/move operations
+	case copyStartedMsg: // Operation started
+		if msg.err != nil {
+			m.err = msg.err
+			m.progressState.IsActive = false
+			return m, nil
+		}
+		m.progressState.IsActive = true
+		m.progressState.StartTime = time.Now()
+		return m, waitForProgressMsg(m.progressChan)
+
+	case progressMsg:
+		if msg.Done {
+			m.progressState.IsActive = false
+			if msg.Err != nil {
+				m.err = msg.Err
+			}
+			// Reload both source and destination panes
+			cmds := []tea.Cmd{m.leftPane.loadDirectoryCmd(""), m.rightPane.loadDirectoryCmd("")}
+			return m, tea.Batch(cmds...)
+		}
+
+		m.progressState.TotalBytes = msg.TotalBytes
+		m.progressState.WrittenBytes = msg.CurrentBytes
+		m.progressState.TotalFiles = msg.TotalFiles
+		m.progressState.ProcessedFiles = msg.ProcessedFiles
+		m.progressState.CurrentFile = msg.CurrentFile
+
+		return m, waitForProgressMsg(m.progressChan)
+
+	case fileOperationMsg: // For copy/move operations (Legacy or synchronous?)
+		// We still keep this if other commands use it, but copy/move now use progressMsg
 		if msg.err != nil {
 			m.err = msg.err
 		} else {

@@ -64,6 +64,20 @@ type model struct {
 	keyMap                KeyMap
 	modifierState         ModifierState
 	aliasMap              map[string]string
+
+	progressState ProgressState
+	progressChan  chan progressMsg
+}
+
+// ProgressState tracks the progress of file operations.
+type ProgressState struct {
+	IsActive       bool
+	TotalBytes     int64
+	WrittenBytes   int64
+	TotalFiles     int
+	ProcessedFiles int
+	CurrentFile    string
+	StartTime      time.Time
 }
 
 // ModifierState tracks the state of modifier keys.
@@ -94,8 +108,9 @@ func initialModel() model {
 			active:   false,
 			selected: make(map[string]struct{}),
 		},
-		keyMap:   km,
-		aliasMap: km.GetAliasMap(),
+		keyMap:       km,
+		aliasMap:     km.GetAliasMap(),
+		progressChan: make(chan progressMsg),
 	}
 }
 

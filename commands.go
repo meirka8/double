@@ -48,40 +48,14 @@ func deleteFileCmd(f file) tea.Cmd {
 	}
 }
 
-func copyFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
+// waitForProgressMsg waits for a progress message from the channel.
+func waitForProgressMsg(sub chan progressMsg) tea.Cmd {
 	return func() tea.Msg {
-		if !force {
-			var conflicts []fileConflict
-			for _, srcFile := range sourceFiles {
-				destFilePath := filepath.Join(destPath, srcFile.Name)
-				if _, err := os.Stat(destFilePath); !os.IsNotExist(err) {
-					conflicts = append(conflicts, fileConflict{Source: srcFile, Destination: destFilePath})
-				}
-			}
-			if len(conflicts) > 0 {
-				return fileConflictMsg{Conflicts: conflicts}
-			}
-		}
-
-		for _, srcFile := range sourceFiles {
-			destFilePath := filepath.Join(destPath, srcFile.Name)
-			if srcFile.IsDir {
-				err := copyDir(srcFile.Path, destFilePath)
-				if err != nil {
-					return fileOperationMsg{err: fmt.Errorf("failed to copy directory %s: %w", srcFile.Name, err)}
-				}
-			} else {
-				err := copyFile(srcFile.Path, destFilePath)
-				if err != nil {
-					return fileOperationMsg{err: fmt.Errorf("failed to copy file %s: %w", srcFile.Name, err)}
-				}
-			}
-		}
-		return fileOperationMsg{err: nil}
+		return <-sub
 	}
 }
 
-func moveFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
+func copyFilesCmd(sourceFiles []file, destPath string, force bool, progressChan chan<- progressMsg) tea.Cmd {
 	return func() tea.Msg {
 		if !force {
 			var conflicts []fileConflict
@@ -96,14 +70,125 @@ func moveFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
 			}
 		}
 
-		for _, srcFile := range sourceFiles {
-			destFilePath := filepath.Join(destPath, srcFile.Name)
-			err := os.Rename(srcFile.Path, destFilePath)
-			if err != nil {
-				return fileOperationMsg{err: fmt.Errorf("failed to move %s: %w", srcFile.Name, err)}
+		// Calculate total size and files
+		totalBytes, totalFiles, err := calculateTotalSize(sourceFiles)
+		if err != nil {
+			return copyStartedMsg{err: err}
+		}
+
+		go func() {
+			currentBytes := int64(0)
+			processedFiles := 0
+
+			progressChan <- progressMsg{
+				TotalBytes:   totalBytes,
+				CurrentBytes: 0,
+				TotalFiles:   totalFiles,
+				Done:         false,
+			}
+
+			for _, srcFile := range sourceFiles {
+				destFilePath := filepath.Join(destPath, srcFile.Name)
+
+				progressChan <- progressMsg{
+					TotalBytes:   totalBytes,
+					CurrentBytes: currentBytes,
+					TotalFiles:   totalFiles,
+					CurrentFile:  srcFile.Name,
+					Done:         false,
+				}
+
+				var err error
+				if srcFile.IsDir {
+					err = copyDir(srcFile.Path, destFilePath, func(n int64) {
+						currentBytes += n
+						progressChan <- progressMsg{
+							TotalBytes:     totalBytes,
+							CurrentBytes:   currentBytes,
+							TotalFiles:     totalFiles,
+							ProcessedFiles: processedFiles,
+							CurrentFile:    srcFile.Name, // Ideally show subfile
+							Done:           false,
+						}
+					})
+				} else {
+					err = copyFile(srcFile.Path, destFilePath, func(n int64) {
+						currentBytes += n
+						progressChan <- progressMsg{
+							TotalBytes:     totalBytes,
+							CurrentBytes:   currentBytes,
+							TotalFiles:     totalFiles,
+							ProcessedFiles: processedFiles,
+							CurrentFile:    srcFile.Name,
+							Done:           false,
+						}
+					})
+				}
+
+				if err != nil {
+					progressChan <- progressMsg{Err: fmt.Errorf("failed to copy %s: %w", srcFile.Name, err), Done: true}
+					return
+				}
+				processedFiles++
+			}
+			progressChan <- progressMsg{Done: true}
+		}()
+
+		// Return a nil message effectively, but we might want to signal start?
+		// But the goroutine sends the first progressMsg immediately.
+		// The caller will run waitForProgressMsg.
+		return copyStartedMsg{}
+	}
+}
+
+type copyStartedMsg struct {
+	err error
+}
+
+func moveFilesCmd(sourceFiles []file, destPath string, force bool, progressChan chan<- progressMsg) tea.Cmd {
+	return func() tea.Msg {
+		if !force {
+			var conflicts []fileConflict
+			for _, srcFile := range sourceFiles {
+				destFilePath := filepath.Join(destPath, srcFile.Name)
+				if _, err := os.Stat(destFilePath); !os.IsNotExist(err) {
+					conflicts = append(conflicts, fileConflict{Source: srcFile, Destination: destFilePath})
+				}
+			}
+			if len(conflicts) > 0 {
+				return fileConflictMsg{Conflicts: conflicts}
 			}
 		}
-		return fileOperationMsg{err: nil}
+
+		// Check for cross-device move?
+		// For now we assume os.Rename works or fails.
+		// If we wanted to support robust move (copy+del), we would need similar logic to copyFilesCmd.
+		// Let's implement basic progress reporting for Rename.
+
+		totalFiles := len(sourceFiles)
+
+		go func() {
+			for i, srcFile := range sourceFiles {
+				progressChan <- progressMsg{
+					TotalFiles:     totalFiles,
+					ProcessedFiles: i,
+					CurrentFile:    srcFile.Name,
+					Done:           false,
+				}
+
+				destFilePath := filepath.Join(destPath, srcFile.Name)
+				err := os.Rename(srcFile.Path, destFilePath)
+				if err != nil {
+					// Todo: handle cross-device link error by falling back to copy+delete?
+					// For now, report error.
+					progressChan <- progressMsg{Err: fmt.Errorf("failed to move %s: %w", srcFile.Name, err), Done: true}
+					return
+				}
+			}
+			progressChan <- progressMsg{Done: true}
+		}()
+
+		return copyStartedMsg{} // Reusing copyStartedMsg or we can rename it to operationStartedMsg
 	}
 }
 

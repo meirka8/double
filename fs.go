@@ -21,7 +21,7 @@ func getFilesFromSelected(p pane) []file {
 }
 
 // copyFile copies a single file from src to dst.
-func copyFile(src, dst string) error {
+func copyFile(src, dst string, onProgress func(int64)) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -34,9 +34,25 @@ func copyFile(src, dst string) error {
 	}
 	defer destFile.Close()
 
-	_, err = io.Copy(destFile, sourceFile)
-	if err != nil {
-		return err
+	// Use a small buffer and copy manually to track progress
+	buf := make([]byte, 32*1024) // 32KB buffer
+	for {
+		n, err := sourceFile.Read(buf)
+		if n > 0 {
+			_, wErr := destFile.Write(buf[:n])
+			if wErr != nil {
+				return wErr
+			}
+			if onProgress != nil {
+				onProgress(int64(n))
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	sourceInfo, err := os.Stat(src)
@@ -47,7 +63,7 @@ func copyFile(src, dst string) error {
 }
 
 // copyDir recursively copies a directory from src to dst.
-func copyDir(src, dst string) error {
+func copyDir(src, dst string, onProgress func(int64)) error {
 	sourceInfo, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -68,12 +84,12 @@ func copyDir(src, dst string) error {
 		dstPath := filepath.Join(dst, entry.Name())
 
 		if entry.IsDir() {
-			err = copyDir(srcPath, dstPath)
+			err = copyDir(srcPath, dstPath, onProgress)
 			if err != nil {
 				return err
 			}
 		} else {
-			err = copyFile(srcPath, dstPath)
+			err = copyFile(srcPath, dstPath, onProgress)
 			if err != nil {
 				return err
 			}
@@ -128,4 +144,36 @@ func readDirectory(dirPath string) ([]file, error) {
 	}
 
 	return files, nil
+}
+
+// calculateTotalSize calculates the total size and file count of a list of files/directories.
+func calculateTotalSize(files []file) (int64, int, error) {
+	var totalSize int64
+	var totalFiles int
+
+	for _, f := range files {
+		if f.IsDir {
+			err := filepath.WalkDir(f.Path, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if !d.IsDir() {
+					info, err := d.Info()
+					if err != nil {
+						return err
+					}
+					totalSize += info.Size()
+					totalFiles++
+				}
+				return nil
+			})
+			if err != nil {
+				return 0, 0, err
+			}
+		} else {
+			totalSize += f.Size
+			totalFiles++
+		}
+	}
+	return totalSize, totalFiles, nil
 }
