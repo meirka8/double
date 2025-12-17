@@ -13,7 +13,8 @@ type fileOpenedMsg struct {
 }
 
 type folderCreatedMsg struct {
-	err error
+	err        error
+	folderPath string
 }
 
 type fileDeletedMsg struct {

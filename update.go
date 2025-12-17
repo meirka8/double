@@ -365,11 +365,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			// Reload directory in active pane
+			// Reload directory in active pane and focus on the newly created folder
 			if m.leftPane.active {
-				return m, m.leftPane.loadDirectoryCmd("")
+				return m, m.leftPane.loadDirectoryCmd(msg.folderPath)
 			} else {
-				return m, m.rightPane.loadDirectoryCmd("")
+				return m, m.rightPane.loadDirectoryCmd(msg.folderPath)
 			}
 		}
 		return m, nil
