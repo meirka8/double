@@ -475,7 +475,8 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 					}
 
 					p.path = selectedFile.Path
-					p.cursor = 0 // Reset cursor when entering a new directory
+					p.cursor = 0    // Reset cursor when entering a new directory
+					p.viewportY = 0 // Reset viewport when entering a new directory
 					return p, p.loadDirectoryCmd("")
 				} else {
 					return p, openFileCmd(selectedFile.Path)
