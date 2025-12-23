@@ -71,7 +71,10 @@ func (m model) statusBarView() string {
 	}
 
 	if m.isDeleting {
-		return confirmPromptStyle.Render(fmt.Sprintf("Delete %s? (y/n)", m.fileToDelete.Name))
+		if len(m.filesToDelete) == 1 {
+			return confirmPromptStyle.Render(fmt.Sprintf("Delete %s? (y/n)", m.filesToDelete[0].Name))
+		}
+		return confirmPromptStyle.Render(fmt.Sprintf("Delete %d items? (y/n)", len(m.filesToDelete)))
 	}
 
 	if m.isConfirmingOverwrite {

@@ -48,6 +48,23 @@ func deleteFileCmd(f file) tea.Cmd {
 	}
 }
 
+func deleteFilesCmd(files []file) tea.Cmd {
+	return func() tea.Msg {
+		for _, f := range files {
+			var err error
+			if f.IsDir {
+				err = os.RemoveAll(f.Path)
+			} else {
+				err = os.Remove(f.Path)
+			}
+			if err != nil {
+				return fileDeletedMsg{err: fmt.Errorf("failed to delete %s: %w", f.Name, err)}
+			}
+		}
+		return fileDeletedMsg{err: nil}
+	}
+}
+
 func copyFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
 	return func() tea.Msg {
 		if !force {

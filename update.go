@@ -81,13 +81,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "y", "Y":
+				activePane := &m.leftPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+				}
 				m.isDeleting = false
-				cmd = deleteFileCmd(m.fileToDelete)
-				m.fileToDelete = file{} // Clear file to delete
+				cmd = deleteFilesCmd(m.filesToDelete)
+				m.filesToDelete = nil                           // Clear files to delete
+				activePane.selected = make(map[string]struct{}) // Clear selection
 				return m, cmd
 			case "n", "N", "esc":
 				m.isDeleting = false
-				m.fileToDelete = file{} // Clear file to delete
+				m.filesToDelete = nil // Clear files to delete
 				return m, nil
 			}
 		}
@@ -271,9 +276,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.rightPane.active {
 					activePane = &m.rightPane
 				}
-				if len(activePane.files) > 0 {
+				files := getFilesFromSelected(*activePane)
+				if len(files) == 0 && len(activePane.files) > 0 { // Nothing selected, use focused file
+					files = []file{activePane.files[activePane.cursor]}
+				}
+				if len(files) > 0 {
 					m.isDeleting = true
-					m.fileToDelete = activePane.files[activePane.cursor]
+					m.filesToDelete = files
 				}
 				return m, nil
 			case m.keyMap.CopyPath.Key:
