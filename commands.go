@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/atotto/clipboard"
@@ -37,19 +38,12 @@ func createFolderCmd(path string) tea.Cmd {
 }
 
 func deleteFileCmd(f file) tea.Cmd {
-	return func() tea.Msg {
-		var err error
-		if f.IsDir {
-			err = os.RemoveAll(f.Path)
-		} else {
-			err = os.Remove(f.Path)
-		}
-		return fileDeletedMsg{err: err}
-	}
+	return deleteFilesCmd([]file{f})
 }
 
 func deleteFilesCmd(files []file) tea.Cmd {
 	return func() tea.Msg {
+		var errors []string
 		for _, f := range files {
 			var err error
 			if f.IsDir {
@@ -58,8 +52,11 @@ func deleteFilesCmd(files []file) tea.Cmd {
 				err = os.Remove(f.Path)
 			}
 			if err != nil {
-				return fileDeletedMsg{err: fmt.Errorf("failed to delete %s: %w", f.Name, err)}
+				errors = append(errors, fmt.Sprintf("%s: %v", f.Name, err))
 			}
+		}
+		if len(errors) > 0 {
+			return fileDeletedMsg{err: fmt.Errorf("failed to delete: %s", strings.Join(errors, ", "))}
 		}
 		return fileDeletedMsg{err: nil}
 	}
