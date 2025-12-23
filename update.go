@@ -374,11 +374,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			// Reload directory in active pane
+			// Reload directory in active pane and focus on the newly created folder
 			if m.leftPane.active {
-				return m, m.leftPane.loadDirectoryCmd("")
+				return m, m.leftPane.loadDirectoryCmd(msg.folderPath)
 			} else {
-				return m, m.rightPane.loadDirectoryCmd("")
+				return m, m.rightPane.loadDirectoryCmd(msg.folderPath)
 			}
 		}
 		return m, nil
@@ -484,7 +484,8 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 					}
 
 					p.path = selectedFile.Path
-					p.cursor = 0 // Reset cursor when entering a new directory
+					p.cursor = 0    // Reset cursor when entering a new directory
+					p.viewportY = 0 // Reset viewport when entering a new directory
 					return p, p.loadDirectoryCmd("")
 				} else {
 					return p, openFileCmd(selectedFile.Path)
