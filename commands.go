@@ -32,7 +32,7 @@ func openFileCmd(path string) tea.Cmd {
 func createFolderCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		err := os.Mkdir(path, 0755)
-		return folderCreatedMsg{err: err}
+		return folderCreatedMsg{err: err, folderPath: path}
 	}
 }
 
