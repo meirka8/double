@@ -7,6 +7,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// ensureCursorInBounds validates and adjusts cursor position to be within file list bounds
+func ensureCursorInBounds(p *pane) {
+	if p.cursor >= len(p.files) {
+		if len(p.files) > 0 {
+			p.cursor = len(p.files) - 1
+		} else {
+			p.cursor = 0
+		}
+	}
+}
+
 // Update handles messages and updates the model.
 func (m *model) processOverwriteConflicts() tea.Cmd {
 	if m.skipAll {
@@ -81,13 +92,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "y", "Y":
+				activePane := &m.leftPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+				}
 				m.isDeleting = false
-				cmd = deleteFileCmd(m.fileToDelete)
-				m.fileToDelete = file{} // Clear file to delete
+				cmd = deleteFilesCmd(m.filesToDelete)
+				m.filesToDelete = nil                           // Clear files to delete
+				activePane.selected = make(map[string]struct{}) // Clear selection
 				return m, cmd
 			case "n", "N", "esc":
 				m.isDeleting = false
-				m.fileToDelete = file{} // Clear file to delete
+				m.filesToDelete = nil // Clear files to delete
 				return m, nil
 			}
 		}
@@ -271,9 +287,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.rightPane.active {
 					activePane = &m.rightPane
 				}
-				if len(activePane.files) > 0 {
+				files := getFilesFromSelected(*activePane)
+				if len(files) == 0 && len(activePane.files) > 0 { // Nothing selected, use focused file
+					files = []file{activePane.files[activePane.cursor]}
+				}
+				if len(files) > 0 {
 					m.isDeleting = true
-					m.fileToDelete = activePane.files[activePane.cursor]
+					m.filesToDelete = files
 				}
 				return m, nil
 			case m.keyMap.CopyPath.Key:
@@ -315,6 +335,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// Ensure cursor is within bounds after directory reload
+			ensureCursorInBounds(&m.leftPane)
 		} else if msg.paneID == m.rightPane.id {
 			m.rightPane.files = msg.files
 			m.rightPane.err = msg.err
@@ -330,6 +352,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// Ensure cursor is within bounds after directory reload
+			ensureCursorInBounds(&m.rightPane)
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -436,7 +460,11 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 		case "home":
 			p.cursor = 0
 		case "end":
-			p.cursor = len(p.files) - 1
+			if len(p.files) > 0 {
+				p.cursor = len(p.files) - 1
+			} else {
+				p.cursor = 0
+			}
 		case "up":
 			p.searchQuery = "" // Clear search on navigation
 			if p.cursor > 0 {

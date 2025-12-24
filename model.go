@@ -49,7 +49,7 @@ type model struct {
 	isCreatingFolder      bool
 	folderNameInput       string
 	isDeleting            bool
-	fileToDelete          file
+	filesToDelete         []file
 	isConfirmingOverwrite bool
 	overwriteConflicts    []fileConflict
 	overwriteAll          bool
