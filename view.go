@@ -10,7 +10,7 @@ import (
 // View renders the application UI.
 func (m model) View() string {
 	if m.quitting {
-		return "Exiting Double Manager. Goodbye!\n"
+		return "Exiting Twin Manager. Goodbye!\n"
 	}
 
 	if m.isPreviewing {

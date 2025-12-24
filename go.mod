@@ -1,4 +1,4 @@
-module double
+module twin
 
 go 1.25.1
 

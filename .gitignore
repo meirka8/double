@@ -1,7 +1,7 @@
 # Binaries
 # Matches the directory name or explicit build output
-double
-double_manager
+twin
+twin_manager
 *.exe
 *.exe~
 *.dll

@@ -1,4 +1,4 @@
-# Double Manager
+# Twin Manager
 
 A minimalistic two-pane TUI file manager in Go.
 
@@ -14,5 +14,5 @@ Or build it first:
 
 ```bash
 go build .
-./double
+./twin
 ```

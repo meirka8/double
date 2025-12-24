@@ -1,4 +1,4 @@
-# Double Manager - Documentation
+# Twin Manager - Documentation
 
 A minimalistic two-pane TUI file manager in Go with Norton-style commands and "starts with" active search.
 
