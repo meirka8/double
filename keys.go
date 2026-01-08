@@ -22,6 +22,8 @@ type KeyMap struct {
 	Delete          Shortcut
 	CopyPath        Shortcut
 	ToggleSelection Shortcut
+	OpenInOther     Shortcut
+	SyncPanes       Shortcut
 }
 
 // DefaultKeyMap returns the default key mapping.
@@ -36,7 +38,9 @@ func DefaultKeyMap() KeyMap {
 		NewFolder:       Shortcut{Key: "alt+n", DisplayKey: "n", FKey: "f7", Modifier: "alt", Action: "MkDir", Cmd: "mkdir"},
 		Delete:          Shortcut{Key: "alt+d", DisplayKey: "d", FKey: "f8", Modifier: "alt", Action: "Delete", Cmd: "delete"},
 		CopyPath:        Shortcut{Key: "alt+p", DisplayKey: "p", FKey: "f9", Modifier: "alt", Action: "Copy Path", Cmd: "copy_path"},
-		ToggleSelection: Shortcut{Key: "alt+i", DisplayKey: "i", Modifier: "alt", Action: "Select", Cmd: "select"},
+		ToggleSelection: Shortcut{Key: "insert", DisplayKey: "ins", Modifier: "", Action: "Select", Cmd: "select"},
+		OpenInOther:     Shortcut{Key: "alt+o", DisplayKey: "o", Modifier: "alt", Action: "Open Other", Cmd: "open_in_other"},
+		SyncPanes:       Shortcut{Key: "alt+i", DisplayKey: "i", Modifier: "alt", Action: "Sync", Cmd: "sync_panes"},
 	}
 }
 
@@ -53,6 +57,8 @@ func (k KeyMap) GetShortcuts() []Shortcut {
 		k.Delete,
 		k.CopyPath,
 		k.ToggleSelection,
+		k.OpenInOther,
+		k.SyncPanes,
 	}
 }
 
