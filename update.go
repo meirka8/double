@@ -313,6 +313,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, copyToClipboardCmd(strings.Join(paths, "\n"))
 				}
 				return m, nil
+			case m.keyMap.SyncPanes.Key:
+				activePane := &m.leftPane
+				otherPane := &m.rightPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+					otherPane = &m.leftPane
+				}
+				otherPane.path = activePane.path
+				otherPane.cursor = 0
+				otherPane.viewportY = 0
+				return m, otherPane.loadDirectoryCmd(otherPane.path)
+			case m.keyMap.OpenInOther.Key:
+				activePane := &m.leftPane
+				otherPane := &m.rightPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+					otherPane = &m.leftPane
+				}
+				if len(activePane.files) > 0 {
+					selectedFile := activePane.files[activePane.cursor]
+					if selectedFile.IsDir {
+						otherPane.path = selectedFile.Path
+						otherPane.cursor = 0
+						otherPane.viewportY = 0
+						return m, otherPane.loadDirectoryCmd(selectedFile.Path)
+					}
+				}
+				return m, nil
 			}
 		}
 	}
@@ -512,7 +540,7 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 			}
 		case "esc":
 			p.searchQuery = "" // Clear search explicitly
-		case "insert", "alt+i":
+		case "insert", "ctrl+i":
 			if len(p.files) > 0 {
 				filePath := p.files[p.cursor].Path
 				if _, ok := p.selected[filePath]; ok {
