@@ -1,0 +1,23 @@
+{
+  "interaction": {
+    "id": "ad6b63c5-18cd-4cb8-b739-6bee7cd9495d",
+    "conversation_id": "a7d3f393-18e3-4f49-b318-4edc15fe6842",
+    "parent_id": null,
+    "timestamp": "2026-01-28T18:18:18Z",
+    "author": "human",
+    "user_prompt": "Hi! Please familiarize yourself with the project by reading #file:DOCUMENTATION.md . Issue at hand is to implement midnight-commander-like functionality of opening a folder in the other pane:\n\nDisplay the contents of the highlighted dir in the other panel (Alt+o)\nMake the other panel show the same directory as the current (Alt+i).",
+    "model_name": "copilot/Gemini 3 Pro (Preview)",
+    "model_cot": null,
+    "model_response": null,
+    "source_request_id": "request_01d2bbda-482f-4b9e-abfb-990a3fde46f4"
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "ad6b63c5-18cd-4cb8-b739-6bee7cd9495d",
+      "git_commit_hash": "40835a53fccf93bf0e1259ee7d75a9f97e6ee706",
+      "link_type": "generated"
+    }
+  ]
+}
