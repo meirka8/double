@@ -192,9 +192,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						selectedPath := m.favorites[m.favoritesCursor]
 						m.isFavoritesOpen = false
 						if m.leftPane.active {
-							return m, m.leftPane.loadDirectoryCmd(selectedPath)
+							m.leftPane.path = selectedPath
+							m.leftPane.cursor = 0
+							m.leftPane.viewportY = 0
+							return m, m.leftPane.loadDirectoryCmd("")
 						} else {
-							return m, m.rightPane.loadDirectoryCmd(selectedPath)
+							m.rightPane.path = selectedPath
+							m.rightPane.cursor = 0
+							m.rightPane.viewportY = 0
+							return m, m.rightPane.loadDirectoryCmd("")
 						}
 					}
 				case "delete", "d":
