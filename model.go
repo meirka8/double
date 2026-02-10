@@ -65,6 +65,7 @@ type model struct {
 	modifierState         ModifierState
 	aliasMap              map[string]string
 	favorites             []string
+	drives                []string
 	isFavoritesOpen       bool
 	favoritesCursor       int
 	isConfirmingRemoveFav bool
@@ -86,7 +87,7 @@ func initialModel() model {
 	}
 
 	favorites := getStandardPaths()
-	favorites = append(favorites, getMountedDrives()...)
+	drives := getMountedDrives()
 
 	km := DefaultKeyMap()
 	return model{
@@ -105,6 +106,7 @@ func initialModel() model {
 		keyMap:    km,
 		aliasMap:  km.GetAliasMap(),
 		favorites: favorites,
+		drives:    drives,
 	}
 }
 

@@ -215,20 +215,32 @@ func (m model) favoritesView() string {
 	var s strings.Builder
 	s.WriteString("Favorites\n\n")
 
-	// Limit rendering to fit? For now, we assume list isn't huge
-	for i, fav := range m.favorites {
+	renderItem := func(i int, name string, isSelected bool) {
 		cursor := "  "
-		if i == m.favoritesCursor {
+		if isSelected {
 			cursor = "> "
 		}
-
-		line := cursor + fav
-		if i == m.favoritesCursor {
+		line := cursor + name
+		if isSelected {
 			s.WriteString(selectionStyle.Render(line))
 		} else {
 			s.WriteString(line)
 		}
 		s.WriteString("\n")
+	}
+
+	for i, fav := range m.favorites {
+		renderItem(i, fav, i == m.favoritesCursor)
+	}
+
+	if len(m.drives) > 0 {
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("──────────────────────"))
+		s.WriteString("\n")
+		for i, drive := range m.drives {
+			// Offset cursor logic for drives
+			globalIndex := len(m.favorites) + i
+			renderItem(globalIndex, drive, globalIndex == m.favoritesCursor)
+		}
 	}
 
 	s.WriteString("\n[Enter] Go  [Esc] Close  [Delete/d] Remove")

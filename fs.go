@@ -147,7 +147,10 @@ func getMountedDrives() []string {
 		if len(fields) < 2 {
 			continue
 		}
-		mountPoint := fields[2]
+		mountPoint := fields[1]
+		// Unescape octal sequences (like \040 for space)
+		mountPoint = strings.ReplaceAll(mountPoint, "\\040", " ")
+		mountPoint = strings.ReplaceAll(mountPoint, "\\011", "\t")
 
 		// Filter for common external drive mount points
 		if strings.HasPrefix(mountPoint, "/media") ||

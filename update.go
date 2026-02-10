@@ -153,9 +153,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.favToRemove >= 0 && m.favToRemove < len(m.favorites) {
 						// Remove favorite
 						m.favorites = append(m.favorites[:m.favToRemove], m.favorites[m.favToRemove+1:]...)
-						if m.favoritesCursor >= len(m.favorites) && len(m.favorites) > 0 {
-							m.favoritesCursor = len(m.favorites) - 1
+
+						// Adjust cursor if out of bounds (but account for drives)
+						totalItems := len(m.favorites) + len(m.drives)
+						if m.favoritesCursor >= totalItems && totalItems > 0 {
+							m.favoritesCursor = totalItems - 1
 						}
+						// If user deleted the last favorite and there are drives below,
+						// the cursor (which was at favToRemove) now points to the drive that shifted up.
+						// We don't need to decrement unless we were at the very end of the *entire* list.
 					}
 					m.isConfirmingRemoveFav = false
 					m.favToRemove = -1
@@ -178,18 +184,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.favoritesCursor--
 					}
 				case "down", "j":
-					if m.favoritesCursor < len(m.favorites)-1 {
+					totalItems := len(m.favorites) + len(m.drives)
+					if m.favoritesCursor < totalItems-1 {
 						m.favoritesCursor++
 					}
 				case "home":
 					m.favoritesCursor = 0
 				case "end":
-					if len(m.favorites) > 0 {
-						m.favoritesCursor = len(m.favorites) - 1
+					totalItems := len(m.favorites) + len(m.drives)
+					if totalItems > 0 {
+						m.favoritesCursor = totalItems - 1
 					}
 				case "enter":
-					if len(m.favorites) > 0 {
-						selectedPath := m.favorites[m.favoritesCursor]
+					totalItems := len(m.favorites) + len(m.drives)
+					if totalItems > 0 && m.favoritesCursor < totalItems {
+						var selectedPath string
+						if m.favoritesCursor < len(m.favorites) {
+							selectedPath = m.favorites[m.favoritesCursor]
+						} else {
+							selectedPath = m.drives[m.favoritesCursor-len(m.favorites)]
+						}
 						m.isFavoritesOpen = false
 						if m.leftPane.active {
 							m.leftPane.path = selectedPath
@@ -204,7 +218,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				case "delete", "d":
-					if len(m.favorites) > 0 {
+					// Allow deleting only from favorites, not drives
+					if len(m.favorites) > 0 && m.favoritesCursor < len(m.favorites) {
 						m.isConfirmingRemoveFav = true
 						m.favToRemove = m.favoritesCursor
 					}
