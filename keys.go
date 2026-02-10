@@ -22,6 +22,8 @@ type KeyMap struct {
 	Delete          Shortcut
 	CopyPath        Shortcut
 	ToggleSelection Shortcut
+	Favorites       Shortcut
+	AddToFavorites  Shortcut
 }
 
 // DefaultKeyMap returns the default key mapping.
@@ -37,6 +39,8 @@ func DefaultKeyMap() KeyMap {
 		Delete:          Shortcut{Key: "alt+d", DisplayKey: "d", FKey: "f8", Modifier: "alt", Action: "Delete", Cmd: "delete"},
 		CopyPath:        Shortcut{Key: "alt+p", DisplayKey: "p", FKey: "f9", Modifier: "alt", Action: "Copy Path", Cmd: "copy_path"},
 		ToggleSelection: Shortcut{Key: "alt+i", DisplayKey: "i", Modifier: "alt", Action: "Select", Cmd: "select"},
+		Favorites:       Shortcut{Key: "alt+f", DisplayKey: "f", Modifier: "alt", Action: "Favorites", Cmd: "favorites"},
+		AddToFavorites:  Shortcut{Key: "alt+a", DisplayKey: "a", Modifier: "alt", Action: "Add Fav", Cmd: "add_favorite"},
 	}
 }
 
@@ -53,6 +57,8 @@ func (k KeyMap) GetShortcuts() []Shortcut {
 		k.Delete,
 		k.CopyPath,
 		k.ToggleSelection,
+		k.Favorites,
+		k.AddToFavorites,
 	}
 }
 

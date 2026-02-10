@@ -55,6 +55,27 @@ func (m model) View() string {
 		return lipgloss.JoinVertical(lipgloss.Left, finalView, m.statusBarView())
 	}
 
+	if m.isFavoritesOpen {
+		var centerContent string
+		if m.isConfirmingRemoveFav {
+			centerContent = m.favoritesConfirmView()
+		} else {
+			centerContent = m.favoritesView()
+		}
+
+		var finalView string
+		if m.leftPane.active {
+			finalView = lipgloss.JoinHorizontal(lipgloss.Top, centerContent, paneView(m.rightPane))
+		} else {
+			finalView = lipgloss.JoinHorizontal(lipgloss.Top, paneView(m.leftPane), centerContent)
+		}
+		return lipgloss.JoinVertical(lipgloss.Left,
+			finalView,
+			m.statusBarView(),
+			m.hintsView(),
+		)
+	}
+
 	leftView := paneView(m.leftPane)
 	rightView := paneView(m.rightPane)
 
@@ -188,4 +209,56 @@ func (m model) hintsView() string {
 		// No spacer needed if margins are handled by styles
 		lipgloss.JoinHorizontal(lipgloss.Left, hints...),
 	)
+}
+
+func (m model) favoritesView() string {
+	var s strings.Builder
+	s.WriteString("Favorites\n\n")
+
+	// Limit rendering to fit? For now, we assume list isn't huge
+	for i, fav := range m.favorites {
+		cursor := "  "
+		if i == m.favoritesCursor {
+			cursor = "> "
+		}
+
+		line := cursor + fav
+		if i == m.favoritesCursor {
+			s.WriteString(selectionStyle.Render(line))
+		} else {
+			s.WriteString(line)
+		}
+		s.WriteString("\n")
+	}
+
+	s.WriteString("\n[Enter] Go  [Esc] Close  [Delete/d] Remove")
+
+	content := popupStyle.Render(s.String())
+
+	activePane := m.leftPane
+	if m.rightPane.active {
+		activePane = m.rightPane
+	}
+
+	return lipgloss.Place(activePane.width, activePane.height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func (m model) favoritesConfirmView() string {
+	fav := ""
+	if m.favToRemove >= 0 && m.favToRemove < len(m.favorites) {
+		fav = m.favorites[m.favToRemove]
+	}
+
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("Remove '%s' from favorites?\n\n", fav))
+	s.WriteString("[y] Yes  [n] No")
+
+	content := popupConfirmStyle.Render(s.String())
+
+	activePane := m.leftPane
+	if m.rightPane.active {
+		activePane = m.rightPane
+	}
+
+	return lipgloss.Place(activePane.width, activePane.height, lipgloss.Center, lipgloss.Center, content)
 }

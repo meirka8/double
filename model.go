@@ -64,6 +64,11 @@ type model struct {
 	keyMap                KeyMap
 	modifierState         ModifierState
 	aliasMap              map[string]string
+	favorites             []string
+	isFavoritesOpen       bool
+	favoritesCursor       int
+	isConfirmingRemoveFav bool
+	favToRemove           int
 }
 
 // ModifierState tracks the state of modifier keys.
@@ -80,6 +85,9 @@ func initialModel() model {
 		log.Fatal(err)
 	}
 
+	favorites := getStandardPaths()
+	favorites = append(favorites, getMountedDrives()...)
+
 	km := DefaultKeyMap()
 	return model{
 		leftPane: pane{
@@ -94,8 +102,9 @@ func initialModel() model {
 			active:   false,
 			selected: make(map[string]struct{}),
 		},
-		keyMap:   km,
-		aliasMap: km.GetAliasMap(),
+		keyMap:    km,
+		aliasMap:  km.GetAliasMap(),
+		favorites: favorites,
 	}
 }
 

@@ -144,6 +144,67 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+	} else if m.isFavoritesOpen {
+		if m.isConfirmingRemoveFav {
+			switch msg := msg.(type) {
+			case tea.KeyMsg:
+				switch msg.String() {
+				case "y", "Y":
+					if m.favToRemove >= 0 && m.favToRemove < len(m.favorites) {
+						// Remove favorite
+						m.favorites = append(m.favorites[:m.favToRemove], m.favorites[m.favToRemove+1:]...)
+						if m.favoritesCursor >= len(m.favorites) && len(m.favorites) > 0 {
+							m.favoritesCursor = len(m.favorites) - 1
+						}
+					}
+					m.isConfirmingRemoveFav = false
+					m.favToRemove = -1
+					return m, nil
+				case "n", "N", "esc":
+					m.isConfirmingRemoveFav = false
+					m.favToRemove = -1
+					return m, nil
+				}
+			}
+		} else {
+			switch msg := msg.(type) {
+			case tea.KeyMsg:
+				switch msg.String() {
+				case "esc", "q", "alt+f":
+					m.isFavoritesOpen = false
+					return m, nil
+				case "up", "k":
+					if m.favoritesCursor > 0 {
+						m.favoritesCursor--
+					}
+				case "down", "j":
+					if m.favoritesCursor < len(m.favorites)-1 {
+						m.favoritesCursor++
+					}
+				case "home":
+					m.favoritesCursor = 0
+				case "end":
+					if len(m.favorites) > 0 {
+						m.favoritesCursor = len(m.favorites) - 1
+					}
+				case "enter":
+					if len(m.favorites) > 0 {
+						selectedPath := m.favorites[m.favoritesCursor]
+						m.isFavoritesOpen = false
+						if m.leftPane.active {
+							return m, m.leftPane.loadDirectoryCmd(selectedPath)
+						} else {
+							return m, m.rightPane.loadDirectoryCmd(selectedPath)
+						}
+					}
+				case "delete", "d":
+					if len(m.favorites) > 0 {
+						m.isConfirmingRemoveFav = true
+						m.favToRemove = m.favoritesCursor
+					}
+				}
+			}
+		}
 	} else if m.isPreviewing {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -311,6 +372,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						paths = append(paths, f.Path)
 					}
 					return m, copyToClipboardCmd(strings.Join(paths, "\n"))
+				}
+				return m, nil
+			case m.keyMap.Favorites.Key:
+				m.isFavoritesOpen = true
+				m.favoritesCursor = 0
+				return m, nil
+			case m.keyMap.AddToFavorites.Key:
+				activePane := &m.leftPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+				}
+
+				pathToAdd := activePane.path
+				if len(activePane.files) > 0 {
+					f := activePane.files[activePane.cursor]
+					if f.IsDir && f.Name != ".." {
+						pathToAdd = f.Path
+					}
+				}
+
+				// Check for duplicates
+				exists := false
+				for _, fav := range m.favorites {
+					if fav == pathToAdd {
+						exists = true
+						break
+					}
+				}
+				if !exists {
+					m.favorites = append(m.favorites, pathToAdd)
 				}
 				return m, nil
 			}
