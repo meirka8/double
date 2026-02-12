@@ -1,0 +1,23 @@
+{
+  "interaction": {
+    "id": "d6ee8aa2-0ab3-4218-9770-b0631652c151",
+    "conversation_id": "20493279-1ec6-40e1-9e8d-702ae99a406e",
+    "parent_id": null,
+    "timestamp": "2026-02-12T10:20:12Z",
+    "author": "human",
+    "user_prompt": "Hi! Please read #file:DOCUMENTATION.md  . Currently hot search works by matching begging of the string for all the records in the pane. Please, change that to fuzzy match.",
+    "model_name": "copilot/Gemini 3 Pro (Preview)",
+    "model_cot": null,
+    "model_response": null,
+    "source_request_id": "request_74305eb4-4f87-418e-a76d-0fccf9656c9d"
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "d6ee8aa2-0ab3-4218-9770-b0631652c151",
+      "git_commit_hash": "b89b1e42b8320c23878f92b65918993f7c41ea03",
+      "link_type": "generated"
+    }
+  ]
+}

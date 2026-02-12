@@ -1,0 +1,23 @@
+{
+  "interaction": {
+    "id": "c5b68ec5-8fb4-4422-8990-88e605e0cd76",
+    "conversation_id": "20493279-1ec6-40e1-9e8d-702ae99a406e",
+    "parent_id": null,
+    "timestamp": "2026-02-12T10:21:12Z",
+    "author": "human",
+    "user_prompt": "Thank you! Now please change it to fuzzy match",
+    "model_name": "copilot/Gemini 3 Pro (Preview)",
+    "model_cot": null,
+    "model_response": null,
+    "source_request_id": "request_b7e2e5dc-e23c-4b86-b675-ae90853f3bc3"
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "c5b68ec5-8fb4-4422-8990-88e605e0cd76",
+      "git_commit_hash": "b89b1e42b8320c23878f92b65918993f7c41ea03",
+      "link_type": "generated"
+    }
+  ]
+}
