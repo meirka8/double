@@ -14,3 +14,17 @@ func calculateWrappedLines(content string, width int) []string {
 	wrappedContent := lipgloss.NewStyle().Width(width).Render(content)
 	return strings.Split(wrappedContent, "\n")
 }
+
+// fuzzyMatch checks if the characters in source appear in target in order.
+func fuzzyMatch(source, target string) bool {
+	sourceRunes := []rune(source)
+	targetRunes := []rune(target)
+
+	sIdx := 0
+	for _, tR := range targetRunes {
+		if sIdx < len(sourceRunes) && tR == sourceRunes[sIdx] {
+			sIdx++
+		}
+	}
+	return sIdx == len(sourceRunes)
+}

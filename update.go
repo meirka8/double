@@ -532,7 +532,7 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 				lowerSearchQuery := strings.ToLower(p.searchQuery)
 
 				for i, f := range p.files {
-					if strings.HasPrefix(strings.ToLower(f.Name), lowerSearchQuery) {
+					if fuzzyMatch(lowerSearchQuery, strings.ToLower(f.Name)) {
 						p.cursor = i
 						break
 					}
