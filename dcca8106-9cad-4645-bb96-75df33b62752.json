@@ -1,0 +1,23 @@
+{
+  "interaction": {
+    "id": "dcca8106-9cad-4645-bb96-75df33b62752",
+    "conversation_id": "53196d3d-7ccf-4e06-bf3a-22eabc7a6999",
+    "parent_id": null,
+    "timestamp": "2026-02-10T21:45:27Z",
+    "author": "human",
+    "user_prompt": "Thakn you! Now we have the standard list of favorite directories, it looks great and works, can we, like nautilus, also add there currently mounted drives? to navigate into the mount folder? maybe even delimit the lists of favorites and the list of drives by a horizontal delimiter?",
+    "model_name": "copilot/Gemini 3 Pro (Preview)",
+    "model_cot": null,
+    "model_response": null,
+    "source_request_id": "request_876ba19e-7b79-4fa9-bdda-e7033c9d7d30"
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "dcca8106-9cad-4645-bb96-75df33b62752",
+      "git_commit_hash": "f56f1ca7d127a894a3642e9a27933f231a810bdb",
+      "link_type": "generated"
+    }
+  ]
+}

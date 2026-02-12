@@ -1,0 +1,23 @@
+{
+  "interaction": {
+    "id": "e3e86372-3908-42b1-87f4-32a19576b1b6",
+    "conversation_id": "53196d3d-7ccf-4e06-bf3a-22eabc7a6999",
+    "parent_id": null,
+    "timestamp": "2026-02-10T20:34:26Z",
+    "author": "human",
+    "user_prompt": "Hi! Please read #file:DOCUMENTATION.md . I want to add quick access / favourites menu like the left pane in nautilus file manager from gnome of windows explorer. However, it looks like intorducing sidepanes doesn't go well with the the double-pane design. Let's add a pop-up menu, that will pop up at the center of active pane with the menu containing a pre-set list of favourite directories like home, documents and downloads. Let's also add there currently mounted additional drives. Please add 2 new shortcuts - to pop up the menu and to add a dictionary the cursor is currently on to the favorites menu when navigating regularly. Also in the favorites menu there should be a shortcut to remove item from it, that will prompt a confirmation dialogue before doing so.",
+    "model_name": "copilot/Gemini 3 Pro (Preview)",
+    "model_cot": null,
+    "model_response": null,
+    "source_request_id": "request_95bbe642-9821-46f7-9113-992e488af76a"
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "e3e86372-3908-42b1-87f4-32a19576b1b6",
+      "git_commit_hash": "f15dac8aba1310401b2caa7c5a9b12e3a61c065a",
+      "link_type": "generated"
+    }
+  ]
+}

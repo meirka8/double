@@ -1,0 +1,23 @@
+{
+  "interaction": {
+    "id": "90a29886-9ca3-4d83-9d7b-04c4b7ff729e",
+    "conversation_id": "53196d3d-7ccf-4e06-bf3a-22eabc7a6999",
+    "parent_id": null,
+    "timestamp": "2026-02-10T21:51:27Z",
+    "author": "human",
+    "user_prompt": "Ah, thanks, I'm sorry, it seems like the list of drives was supposed to be there already, but it's actually not - see screenshot from our browser. I currently have 2 cloud drives mounted through rclone which probably a different story and also 4 different volumes mounted seen in nautilus' left pane.",
+    "model_name": "copilot/Gemini 3 Pro (Preview)",
+    "model_cot": null,
+    "model_response": null,
+    "source_request_id": "request_193e0a09-6392-4525-aa9e-ba663d4aeaa4"
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "90a29886-9ca3-4d83-9d7b-04c4b7ff729e",
+      "git_commit_hash": "f56f1ca7d127a894a3642e9a27933f231a810bdb",
+      "link_type": "generated"
+    }
+  ]
+}

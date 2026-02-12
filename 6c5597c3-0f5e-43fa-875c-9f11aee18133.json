@@ -1,0 +1,23 @@
+{
+  "interaction": {
+    "id": "6c5597c3-0f5e-43fa-875c-9f11aee18133",
+    "conversation_id": "53196d3d-7ccf-4e06-bf3a-22eabc7a6999",
+    "parent_id": null,
+    "timestamp": "2026-02-10T21:37:27Z",
+    "author": "human",
+    "user_prompt": "Brilliant, thank you! The visual functionality with menu popping up works fine, but when selecting an entry in the menu, menu just exits and the pane is revealed to have remained in the same location as before, not navigating to the favorite item selected",
+    "model_name": "copilot/Gemini 3 Pro (Preview)",
+    "model_cot": null,
+    "model_response": null,
+    "source_request_id": "request_7f52541d-d976-48ac-96fa-f3142d533176"
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "6c5597c3-0f5e-43fa-875c-9f11aee18133",
+      "git_commit_hash": "9d9e9b45b1476145a3266d5776d9b67ee57d98cb",
+      "link_type": "generated"
+    }
+  ]
+}
