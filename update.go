@@ -313,6 +313,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, copyToClipboardCmd(strings.Join(paths, "\n"))
 				}
 				return m, nil
+			case m.keyMap.SyncPanes.Key:
+				activePane := &m.leftPane
+				inactivePane := &m.rightPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+					inactivePane = &m.leftPane
+				}
+				inactivePane.path = activePane.path
+				// Reset cursor and viewport for the inactive pane
+				inactivePane.cursor = 0
+				inactivePane.viewportY = 0
+				return m, inactivePane.loadDirectoryCmd("")
+			case m.keyMap.OpenInOther.Key:
+				activePane := &m.leftPane
+				inactivePane := &m.rightPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+					inactivePane = &m.leftPane
+				}
+				if len(activePane.files) > 0 {
+					selectedFile := activePane.files[activePane.cursor]
+					if selectedFile.IsDir {
+						inactivePane.path = selectedFile.Path
+						// Reset cursor and viewport for the inactive pane
+						inactivePane.cursor = 0
+						inactivePane.viewportY = 0
+						return m, inactivePane.loadDirectoryCmd("")
+					}
+				}
+				return m, nil
 			}
 		}
 	}
@@ -512,7 +542,7 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 			}
 		case "esc":
 			p.searchQuery = "" // Clear search explicitly
-		case "insert", "alt+i":
+		case "insert":
 			if len(p.files) > 0 {
 				filePath := p.files[p.cursor].Path
 				if _, ok := p.selected[filePath]; ok {
