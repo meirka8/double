@@ -559,12 +559,25 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 			// Handle active search
 			if len(msg.String()) == 1 { // Only process single character inputs
 				p.searchQuery += msg.String()
-				lowerSearchQuery := strings.ToLower(p.searchQuery)
+				lowerQuery := strings.ToLower(p.searchQuery)
 
+				// Priority 1: Prefix match
+				found := false
 				for i, f := range p.files {
-					if strings.HasPrefix(strings.ToLower(f.Name), lowerSearchQuery) {
+					if strings.HasPrefix(strings.ToLower(f.Name), lowerQuery) {
 						p.cursor = i
+						found = true
 						break
+					}
+				}
+
+				// Priority 2: Fuzzy match
+				if !found {
+					for i, f := range p.files {
+						if fuzzyMatch(p.searchQuery, f.Name) {
+							p.cursor = i
+							break
+						}
 					}
 				}
 			}
