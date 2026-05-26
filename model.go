@@ -70,6 +70,8 @@ type model struct {
 	favoritesCursor       int
 	isConfirmingRemoveFav bool
 	favToRemove           int
+	isConfirmingUnmount   bool
+	driveToUnmount        string
 }
 
 // ModifierState tracks the state of modifier keys.

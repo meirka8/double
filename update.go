@@ -145,7 +145,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	} else if m.isFavoritesOpen {
-		if m.isConfirmingRemoveFav {
+		if m.isConfirmingUnmount {
+			switch msg := msg.(type) {
+			case tea.KeyMsg:
+				switch msg.String() {
+				case "y", "Y":
+					m.isConfirmingUnmount = false
+					path := m.driveToUnmount
+					m.driveToUnmount = ""
+					return m, unmountDriveCmd(path)
+				case "n", "N", "esc":
+					m.isConfirmingUnmount = false
+					m.driveToUnmount = ""
+					return m, nil
+				}
+			}
+		} else if m.isConfirmingRemoveFav {
 			switch msg := msg.(type) {
 			case tea.KeyMsg:
 				switch msg.String() {
@@ -218,10 +233,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				case "delete", "d":
-					// Allow deleting only from favorites, not drives
 					if len(m.favorites) > 0 && m.favoritesCursor < len(m.favorites) {
+						// Remove from favorites
 						m.isConfirmingRemoveFav = true
 						m.favToRemove = m.favoritesCursor
+					} else if m.favoritesCursor >= len(m.favorites) && len(m.drives) > 0 {
+						// Unmount drive
+						driveIdx := m.favoritesCursor - len(m.favorites)
+						if driveIdx < len(m.drives) {
+							m.isConfirmingUnmount = true
+							m.driveToUnmount = m.drives[driveIdx]
+						}
 					}
 				}
 			}
@@ -541,6 +563,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Reload both source and destination panes
 			cmds := []tea.Cmd{m.leftPane.loadDirectoryCmd(""), m.rightPane.loadDirectoryCmd("")}
 			return m, tea.Batch(cmds...)
+		}
+		return m, nil
+	case driveUnmountedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			// Refresh drives list after successful unmount
+			m.drives = getMountedDrives()
+			totalItems := len(m.favorites) + len(m.drives)
+			if m.favoritesCursor >= totalItems && totalItems > 0 {
+				m.favoritesCursor = totalItems - 1
+			}
 		}
 		return m, nil
 	case previewReadyMsg:

@@ -143,6 +143,14 @@ func previewFileCmd(path string) tea.Cmd {
 	}
 }
 
+func unmountDriveCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("umount", path)
+		err := cmd.Run()
+		return driveUnmountedMsg{err: err, drivePath: path}
+	}
+}
+
 func copyToClipboardCmd(text string) tea.Cmd {
 	return func() tea.Msg {
 		err := clipboard.WriteAll(text)

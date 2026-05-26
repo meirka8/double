@@ -59,6 +59,8 @@ func (m model) View() string {
 		var centerContent string
 		if m.isConfirmingRemoveFav {
 			centerContent = m.favoritesConfirmView()
+		} else if m.isConfirmingUnmount {
+			centerContent = m.favoritesUnmountConfirmView()
 		} else {
 			centerContent = m.favoritesView()
 		}
@@ -243,7 +245,11 @@ func (m model) favoritesView() string {
 		}
 	}
 
-	s.WriteString("\n[Enter] Go  [Esc] Close  [Delete/d] Remove")
+	deleteHint := "[Delete/d] Remove"
+	if m.favoritesCursor >= len(m.favorites) {
+		deleteHint = "[d] Unmount"
+	}
+	s.WriteString("\n[Enter] Go  [Esc] Close  " + deleteHint)
 
 	content := popupStyle.Render(s.String())
 
@@ -263,6 +269,21 @@ func (m model) favoritesConfirmView() string {
 
 	var s strings.Builder
 	s.WriteString(fmt.Sprintf("Remove '%s' from favorites?\n\n", fav))
+	s.WriteString("[y] Yes  [n] No")
+
+	content := popupConfirmStyle.Render(s.String())
+
+	activePane := m.leftPane
+	if m.rightPane.active {
+		activePane = m.rightPane
+	}
+
+	return lipgloss.Place(activePane.width, activePane.height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func (m model) favoritesUnmountConfirmView() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("Unmount '%s'?\n\n", m.driveToUnmount))
 	s.WriteString("[y] Yes  [n] No")
 
 	content := popupConfirmStyle.Render(s.String())
