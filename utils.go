@@ -15,16 +15,20 @@ func calculateWrappedLines(content string, width int) []string {
 	return strings.Split(wrappedContent, "\n")
 }
 
-// fuzzyMatch checks if the characters in source appear in target in order.
-func fuzzyMatch(source, target string) bool {
-	sourceRunes := []rune(source)
-	targetRunes := []rune(target)
+// fuzzyMatch checks if the query characters appear in the target string in order.
+func fuzzyMatch(query, target string) bool {
+	if query == "" {
+		return true
+	}
 
-	sIdx := 0
-	for _, tR := range targetRunes {
-		if sIdx < len(sourceRunes) && tR == sourceRunes[sIdx] {
-			sIdx++
+	queryRunes := []rune(strings.ToLower(query))
+	targetRunes := []rune(strings.ToLower(target))
+
+	qIdx := 0
+	for _, t := range targetRunes {
+		if qIdx < len(queryRunes) && t == queryRunes[qIdx] {
+			qIdx++
 		}
 	}
-	return sIdx == len(sourceRunes)
+	return qIdx == len(queryRunes)
 }
