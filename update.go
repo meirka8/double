@@ -446,6 +446,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !exists {
 					m.favorites = append(m.favorites, pathToAdd)
 				}
+			case m.keyMap.SyncPanes.Key:
+				activePane := &m.leftPane
+				inactivePane := &m.rightPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+					inactivePane = &m.leftPane
+				}
+				inactivePane.path = activePane.path
+				// Reset cursor and viewport for the inactive pane
+				inactivePane.cursor = 0
+				inactivePane.viewportY = 0
+				return m, inactivePane.loadDirectoryCmd("")
+			case m.keyMap.OpenInOther.Key:
+				activePane := &m.leftPane
+				inactivePane := &m.rightPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+					inactivePane = &m.leftPane
+				}
+				if len(activePane.files) > 0 {
+					selectedFile := activePane.files[activePane.cursor]
+					if selectedFile.IsDir {
+						inactivePane.path = selectedFile.Path
+						// Reset cursor and viewport for the inactive pane
+						inactivePane.cursor = 0
+						inactivePane.viewportY = 0
+						return m, inactivePane.loadDirectoryCmd("")
+					}
+				}
 				return m, nil
 			}
 		}
@@ -658,7 +687,7 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 			}
 		case "esc":
 			p.searchQuery = "" // Clear search explicitly
-		case "insert", "alt+i":
+		case "insert":
 			if len(p.files) > 0 {
 				filePath := p.files[p.cursor].Path
 				if _, ok := p.selected[filePath]; ok {
@@ -675,12 +704,25 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 			// Handle active search
 			if len(msg.String()) == 1 { // Only process single character inputs
 				p.searchQuery += msg.String()
-				lowerSearchQuery := strings.ToLower(p.searchQuery)
+				lowerQuery := strings.ToLower(p.searchQuery)
 
+				// Priority 1: Prefix match
+				found := false
 				for i, f := range p.files {
-					if strings.HasPrefix(strings.ToLower(f.Name), lowerSearchQuery) {
+					if strings.HasPrefix(strings.ToLower(f.Name), lowerQuery) {
 						p.cursor = i
+						found = true
 						break
+					}
+				}
+
+				// Priority 2: Fuzzy match
+				if !found {
+					for i, f := range p.files {
+						if fuzzyMatch(p.searchQuery, f.Name) {
+							p.cursor = i
+							break
+						}
 					}
 				}
 			}
