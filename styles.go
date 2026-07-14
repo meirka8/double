@@ -43,4 +43,17 @@ var (
 		BorderForeground(lipgloss.Color("238")).
 		Padding(1, 1).
 		MarginRight(1)
+
+	// Popup Styles
+	popupStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Padding(1, 2).
+			Background(lipgloss.Color("235")) // Dark background to cover underlying text
+
+	popupConfirmStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("196")). // Red for remove confirmation
+				Padding(1, 2).
+				Background(lipgloss.Color("235"))
 )

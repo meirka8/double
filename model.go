@@ -64,6 +64,14 @@ type model struct {
 	keyMap                KeyMap
 	modifierState         ModifierState
 	aliasMap              map[string]string
+	favorites             []string
+	drives                []string
+	isFavoritesOpen       bool
+	favoritesCursor       int
+	isConfirmingRemoveFav bool
+	favToRemove           int
+	isConfirmingUnmount   bool
+	driveToUnmount        string
 }
 
 // ModifierState tracks the state of modifier keys.
@@ -80,6 +88,9 @@ func initialModel() model {
 		log.Fatal(err)
 	}
 
+	favorites := getStandardPaths()
+	drives := getMountedDrives()
+
 	km := DefaultKeyMap()
 	return model{
 		leftPane: pane{
@@ -94,8 +105,10 @@ func initialModel() model {
 			active:   false,
 			selected: make(map[string]struct{}),
 		},
-		keyMap:   km,
-		aliasMap: km.GetAliasMap(),
+		keyMap:    km,
+		aliasMap:  km.GetAliasMap(),
+		favorites: favorites,
+		drives:    drives,
 	}
 }
 

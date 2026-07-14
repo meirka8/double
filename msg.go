@@ -37,3 +37,8 @@ type previewReadyMsg struct {
 type clipboardCopiedMsg struct {
 	err error
 }
+
+type driveUnmountedMsg struct {
+	err       error
+	drivePath string
+}

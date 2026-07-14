@@ -144,6 +144,110 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+	} else if m.isFavoritesOpen {
+		if m.isConfirmingUnmount {
+			switch msg := msg.(type) {
+			case tea.KeyMsg:
+				switch msg.String() {
+				case "y", "Y":
+					m.isConfirmingUnmount = false
+					path := m.driveToUnmount
+					m.driveToUnmount = ""
+					return m, unmountDriveCmd(path)
+				case "n", "N", "esc":
+					m.isConfirmingUnmount = false
+					m.driveToUnmount = ""
+					return m, nil
+				}
+			}
+		} else if m.isConfirmingRemoveFav {
+			switch msg := msg.(type) {
+			case tea.KeyMsg:
+				switch msg.String() {
+				case "y", "Y":
+					if m.favToRemove >= 0 && m.favToRemove < len(m.favorites) {
+						// Remove favorite
+						m.favorites = append(m.favorites[:m.favToRemove], m.favorites[m.favToRemove+1:]...)
+
+						// Adjust cursor if out of bounds (but account for drives)
+						totalItems := len(m.favorites) + len(m.drives)
+						if m.favoritesCursor >= totalItems && totalItems > 0 {
+							m.favoritesCursor = totalItems - 1
+						}
+						// If user deleted the last favorite and there are drives below,
+						// the cursor (which was at favToRemove) now points to the drive that shifted up.
+						// We don't need to decrement unless we were at the very end of the *entire* list.
+					}
+					m.isConfirmingRemoveFav = false
+					m.favToRemove = -1
+					return m, nil
+				case "n", "N", "esc":
+					m.isConfirmingRemoveFav = false
+					m.favToRemove = -1
+					return m, nil
+				}
+			}
+		} else {
+			switch msg := msg.(type) {
+			case tea.KeyMsg:
+				switch msg.String() {
+				case "esc", "q", "alt+f":
+					m.isFavoritesOpen = false
+					return m, nil
+				case "up", "k":
+					if m.favoritesCursor > 0 {
+						m.favoritesCursor--
+					}
+				case "down", "j":
+					totalItems := len(m.favorites) + len(m.drives)
+					if m.favoritesCursor < totalItems-1 {
+						m.favoritesCursor++
+					}
+				case "home":
+					m.favoritesCursor = 0
+				case "end":
+					totalItems := len(m.favorites) + len(m.drives)
+					if totalItems > 0 {
+						m.favoritesCursor = totalItems - 1
+					}
+				case "enter":
+					totalItems := len(m.favorites) + len(m.drives)
+					if totalItems > 0 && m.favoritesCursor < totalItems {
+						var selectedPath string
+						if m.favoritesCursor < len(m.favorites) {
+							selectedPath = m.favorites[m.favoritesCursor]
+						} else {
+							selectedPath = m.drives[m.favoritesCursor-len(m.favorites)]
+						}
+						m.isFavoritesOpen = false
+						if m.leftPane.active {
+							m.leftPane.path = selectedPath
+							m.leftPane.cursor = 0
+							m.leftPane.viewportY = 0
+							return m, m.leftPane.loadDirectoryCmd("")
+						} else {
+							m.rightPane.path = selectedPath
+							m.rightPane.cursor = 0
+							m.rightPane.viewportY = 0
+							return m, m.rightPane.loadDirectoryCmd("")
+						}
+					}
+				case "delete", "d":
+					if len(m.favorites) > 0 && m.favoritesCursor < len(m.favorites) {
+						// Remove from favorites
+						m.isConfirmingRemoveFav = true
+						m.favToRemove = m.favoritesCursor
+					} else if m.favoritesCursor >= len(m.favorites) && len(m.drives) > 0 {
+						// Unmount drive
+						driveIdx := m.favoritesCursor - len(m.favorites)
+						if driveIdx < len(m.drives) {
+							m.isConfirmingUnmount = true
+							m.driveToUnmount = m.drives[driveIdx]
+						}
+					}
+				}
+			}
+		}
 	} else if m.isPreviewing {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -313,6 +417,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, copyToClipboardCmd(strings.Join(paths, "\n"))
 				}
 				return m, nil
+			case m.keyMap.Favorites.Key:
+				m.isFavoritesOpen = true
+				m.favoritesCursor = 0
+				return m, nil
+			case m.keyMap.AddToFavorites.Key:
+				activePane := &m.leftPane
+				if m.rightPane.active {
+					activePane = &m.rightPane
+				}
+
+				pathToAdd := activePane.path
+				if len(activePane.files) > 0 {
+					f := activePane.files[activePane.cursor]
+					if f.IsDir && f.Name != ".." {
+						pathToAdd = f.Path
+					}
+				}
+
+				// Check for duplicates
+				exists := false
+				for _, fav := range m.favorites {
+					if fav == pathToAdd {
+						exists = true
+						break
+					}
+				}
+				if !exists {
+					m.favorites = append(m.favorites, pathToAdd)
+				}
 			case m.keyMap.SyncPanes.Key:
 				activePane := &m.leftPane
 				inactivePane := &m.rightPane
@@ -459,6 +592,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Reload both source and destination panes
 			cmds := []tea.Cmd{m.leftPane.loadDirectoryCmd(""), m.rightPane.loadDirectoryCmd("")}
 			return m, tea.Batch(cmds...)
+		}
+		return m, nil
+	case driveUnmountedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			// Refresh drives list after successful unmount
+			m.drives = getMountedDrives()
+			totalItems := len(m.favorites) + len(m.drives)
+			if m.favoritesCursor >= totalItems && totalItems > 0 {
+				m.favoritesCursor = totalItems - 1
+			}
 		}
 		return m, nil
 	case previewReadyMsg:

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -128,4 +129,58 @@ func readDirectory(dirPath string) ([]file, error) {
 	}
 
 	return files, nil
+}
+
+// getMountedDrives returns a list of mounted drive paths on Linux systems.
+func getMountedDrives() []string {
+	content, err := os.ReadFile("/proc/mounts")
+	if err != nil {
+		return nil
+	}
+
+	var drives []string
+	lines := strings.Split(string(content), "\n")
+	seen := make(map[string]struct{})
+
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		mountPoint := fields[1]
+		// Unescape octal sequences (like \040 for space)
+		mountPoint = strings.ReplaceAll(mountPoint, "\\040", " ")
+		mountPoint = strings.ReplaceAll(mountPoint, "\\011", "\t")
+
+		// Filter for common external drive mount points
+		if strings.HasPrefix(mountPoint, "/media") ||
+			strings.HasPrefix(mountPoint, "/mnt") ||
+			strings.HasPrefix(mountPoint, "/run/media") {
+			if _, ok := seen[mountPoint]; !ok {
+				seen[mountPoint] = struct{}{}
+				drives = append(drives, mountPoint)
+			}
+		}
+	}
+	sort.Strings(drives)
+	return drives
+}
+
+// getStandardPaths returns common user directories.
+func getStandardPaths() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return []string{}
+	}
+
+	paths := []string{home}
+	dirs := []string{"Documents", "Downloads", "Desktop", "Pictures", "Music", "Videos"}
+
+	for _, d := range dirs {
+		p := filepath.Join(home, d)
+		if _, err := os.Stat(p); err == nil {
+			paths = append(paths, p)
+		}
+	}
+	return paths
 }

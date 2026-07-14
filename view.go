@@ -55,6 +55,29 @@ func (m model) View() string {
 		return lipgloss.JoinVertical(lipgloss.Left, finalView, m.statusBarView())
 	}
 
+	if m.isFavoritesOpen {
+		var centerContent string
+		if m.isConfirmingRemoveFav {
+			centerContent = m.favoritesConfirmView()
+		} else if m.isConfirmingUnmount {
+			centerContent = m.favoritesUnmountConfirmView()
+		} else {
+			centerContent = m.favoritesView()
+		}
+
+		var finalView string
+		if m.leftPane.active {
+			finalView = lipgloss.JoinHorizontal(lipgloss.Top, centerContent, paneView(m.rightPane))
+		} else {
+			finalView = lipgloss.JoinHorizontal(lipgloss.Top, paneView(m.leftPane), centerContent)
+		}
+		return lipgloss.JoinVertical(lipgloss.Left,
+			finalView,
+			m.statusBarView(),
+			m.hintsView(),
+		)
+	}
+
 	leftView := paneView(m.leftPane)
 	rightView := paneView(m.rightPane)
 
@@ -188,4 +211,87 @@ func (m model) hintsView() string {
 		// No spacer needed if margins are handled by styles
 		lipgloss.JoinHorizontal(lipgloss.Left, hints...),
 	)
+}
+
+func (m model) favoritesView() string {
+	var s strings.Builder
+	s.WriteString("Favorites\n\n")
+
+	renderItem := func(i int, name string, isSelected bool) {
+		cursor := "  "
+		if isSelected {
+			cursor = "> "
+		}
+		line := cursor + name
+		if isSelected {
+			s.WriteString(selectionStyle.Render(line))
+		} else {
+			s.WriteString(line)
+		}
+		s.WriteString("\n")
+	}
+
+	for i, fav := range m.favorites {
+		renderItem(i, fav, i == m.favoritesCursor)
+	}
+
+	if len(m.drives) > 0 {
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("──────────────────────"))
+		s.WriteString("\n")
+		for i, drive := range m.drives {
+			// Offset cursor logic for drives
+			globalIndex := len(m.favorites) + i
+			renderItem(globalIndex, drive, globalIndex == m.favoritesCursor)
+		}
+	}
+
+	deleteHint := "[Delete/d] Remove"
+	if m.favoritesCursor >= len(m.favorites) {
+		deleteHint = "[d] Unmount"
+	}
+	s.WriteString("\n[Enter] Go  [Esc] Close  " + deleteHint)
+
+	content := popupStyle.Render(s.String())
+
+	activePane := m.leftPane
+	if m.rightPane.active {
+		activePane = m.rightPane
+	}
+
+	return lipgloss.Place(activePane.width, activePane.height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func (m model) favoritesConfirmView() string {
+	fav := ""
+	if m.favToRemove >= 0 && m.favToRemove < len(m.favorites) {
+		fav = m.favorites[m.favToRemove]
+	}
+
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("Remove '%s' from favorites?\n\n", fav))
+	s.WriteString("[y] Yes  [n] No")
+
+	content := popupConfirmStyle.Render(s.String())
+
+	activePane := m.leftPane
+	if m.rightPane.active {
+		activePane = m.rightPane
+	}
+
+	return lipgloss.Place(activePane.width, activePane.height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func (m model) favoritesUnmountConfirmView() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("Unmount '%s'?\n\n", m.driveToUnmount))
+	s.WriteString("[y] Yes  [n] No")
+
+	content := popupConfirmStyle.Render(s.String())
+
+	activePane := m.leftPane
+	if m.rightPane.active {
+		activePane = m.rightPane
+	}
+
+	return lipgloss.Place(activePane.width, activePane.height, lipgloss.Center, lipgloss.Center, content)
 }
