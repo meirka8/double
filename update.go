@@ -709,7 +709,7 @@ func (p pane) update(msg tea.Msg) (pane, tea.Cmd) {
 				// Priority 1: Prefix match
 				found := false
 				for i, f := range p.files {
-					if strings.HasPrefix(strings.ToLower(f.Name), lowerQuery) {
+					if fuzzyMatch(lowerSearchQuery, strings.ToLower(f.Name)) {
 						p.cursor = i
 						found = true
 						break
