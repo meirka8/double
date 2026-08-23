@@ -13,7 +13,7 @@ A minimalistic two-pane TUI file manager in Go with Norton-style commands and "s
 *   **Two-pane layout:** A classic two-pane file manager interface.
 *   **File navigation:** Navigate through the file system using the arrow keys, `home`, `end`, `pgup`, and `pgdown`.
 *   **Parent Navigation:** Navigate to the parent directory by selecting the `..` entry.
-*   **File selection:** Select multiple files using `Alt+I` or `Control+I`.
+*   **File selection:** Select multiple files using `Insert`.
 *   **File operations:**
     *   **Copy (Alt+C / F5):** Copy selected files from the active pane to the inactive pane.
     *   **Move (Alt+M / F6):** Move selected files from the active pane to the inactive pane.
@@ -21,9 +21,14 @@ A minimalistic two-pane TUI file manager in Go with Norton-style commands and "s
     *   **New Folder (Alt+N / F7):** Create a new folder in the active pane.
     *   **Copy Path (Alt+P / F9):** Copy the full path of selected files to the system clipboard.
     *   **Preview (Alt+V / F3):** Preview the selected file.
+    *   **Jobs (Alt+J):** Open the operation queue panel.
     *   **Quit (Alt+Q / F10):** Quit the application.
     *   **Force Quit (Ctrl+C):** Force quit the application.
-*   **Overwrite confirmation:** A confirmation prompt is displayed when a file operation would overwrite an existing file.
+*   **Overwrite confirmation:** A confirmation prompt is displayed when a file operation would overwrite an existing file. Answer per file with `y`/`n`, or `A` to overwrite everything remaining and `s` to skip everything remaining. `Esc` abandons the whole operation. Files that do not conflict are copied regardless of how you answer.
+*   **Operation queue:** Copy, move, and delete run in the background, one at a time, in the order they were started. The UI stays usable while they run.
+    *   **Progress indicator:** A compact widget in the bottom-right corner shows the running operation, a progress bar, transferred/total size, current speed, and an ETA. It shares the hints row, so it takes no extra vertical space, and disappears a few seconds after the last operation finishes.
+    *   **Queue panel (Alt+J):** Lists queued, running, finished, and failed operations. `c` cancels the highlighted operation (whether or not it has started), `x` dismisses a finished entry, `Esc` closes the panel.
+    *   **Cancellation:** Cancelling stops the transfer at the next chunk boundary. A cancelled move never removes its source, because the source is only unlinked after the copy has landed.
 *   **Active search:** Start typing to search for files in the active pane.
 *   **File preview:** Preview the content of the selected file in a full-screen overlay.
     *   **Scrollable:** Use `up`, `down`, `pgup`, `pgdown`, `home`, and `end` to scroll through the preview content.
@@ -44,7 +49,11 @@ The two panes are represented by the `pane` struct, which holds the state of a s
 
 ### File Operations
 
-File operations are handled by sending commands (e.g., `copyFilesCmd`, `moveFilesCmd`, `deleteFileCmd`) from the `Update` function. These commands are functions that perform the file system operations and return a message to the `Update` function to signal completion or an error.
+Copy, move, and delete go through the operation queue in `queue.go`. Pressing the shortcut does not start any I/O: it runs `probeConflictsCmd`, which only checks the destination and splits the sources into "no conflict" and "needs an answer". Once the overwrite prompt is resolved, the approved files are appended to the queue as a single `fileOp`.
+
+`Update` dispatches one `fileOp` at a time via `runOpCmd`. Because Bubble Tea runs every command on its own goroutine, the worker can block for the whole transfer; the UI stays live because progress is published into atomic counters on the `fileOp` and read back by a 100 ms `progressTickMsg`, rather than being pushed through a channel. Completion arrives as `opFinishedMsg`, which reloads both panes and starts the next queued operation.
+
+Each operation carries a `context.Context`, so cancelling from the queue panel stops the copy loop at the next chunk. A cross-filesystem move (where `os.Rename` returns `EXDEV`) falls back to copy-then-delete, and only unlinks the source once the copy has succeeded.
 
 ### Preview
 

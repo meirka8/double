@@ -42,6 +42,8 @@ type pane struct {
 
 // model is the main application model.
 type model struct {
+	width                 int // Full terminal width
+	height                int // Full terminal height
 	leftPane              pane
 	rightPane             pane
 	quitting              bool
@@ -51,9 +53,9 @@ type model struct {
 	isDeleting            bool
 	filesToDelete         []file
 	isConfirmingOverwrite bool
-	overwriteConflicts    []fileConflict
-	overwriteAll          bool
-	skipAll               bool
+	overwriteConflicts    []fileConflict // Still to be asked about, one at a time
+	pendingApproved       []file         // Cleared to proceed once the prompt is done
+	pendingDest           string
 	isMoving              bool // To know if the operation is a move or copy
 	isPreviewing          bool
 	previewContent        string
@@ -72,6 +74,39 @@ type model struct {
 	favToRemove           int
 	isConfirmingUnmount   bool
 	driveToUnmount        string
+
+	// Operation queue. Entries run strictly one at a time, oldest first.
+	queue        []*fileOp
+	nextOpID     int
+	queueTicking bool // A progressTickMsg is already in flight
+	isQueueOpen  bool
+	queueCursor  int
+}
+
+// startedAt doubles as the dispatch marker for the two lookups below. It is set
+// on the event loop the instant the worker command is handed to Bubble Tea,
+// which is what stops pumpQueue from starting the same operation twice in the
+// window before its goroutine gets to publish a running state.
+
+// runningOp returns the dispatched operation that has not finished yet, or nil
+// when nothing is running. Only one operation ever executes at a time.
+func (m model) runningOp() *fileOp {
+	for _, op := range m.queue {
+		if !op.startedAt.IsZero() && !opState(op.state.Load()).terminal() {
+			return op
+		}
+	}
+	return nil
+}
+
+// nextQueuedOp returns the oldest operation that has not been dispatched yet.
+func (m model) nextQueuedOp() *fileOp {
+	for _, op := range m.queue {
+		if op.startedAt.IsZero() && !opState(op.state.Load()).terminal() {
+			return op
+		}
+	}
+	return nil
 }
 
 // ModifierState tracks the state of modifier keys.

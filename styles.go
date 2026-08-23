@@ -44,6 +44,31 @@ var (
 		Padding(1, 1).
 		MarginRight(1)
 
+	// Progress Styles
+	progressWidgetStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("234")).
+				Padding(0, 1)
+	progressTitleStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("63")).
+				Background(lipgloss.Color("234")).
+				Bold(true)
+	progressLabelStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("250")).
+				Background(lipgloss.Color("234"))
+	progressDetailStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("244")).
+				Background(lipgloss.Color("234"))
+	progressBarFillStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Background(lipgloss.Color("234"))
+	progressBarTrackStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("238")).Background(lipgloss.Color("234"))
+	progressFailedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Background(lipgloss.Color("234")).Bold(true)
+
+	// Queue panel styles
+	queueRunningStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Bold(true)
+	queueQueuedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	queueDoneStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
+	queueFailedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	queueCancelledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
 	// Popup Styles
 	popupStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
