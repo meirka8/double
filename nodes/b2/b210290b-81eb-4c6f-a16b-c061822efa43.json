@@ -1,0 +1,24 @@
+{
+  "interaction": {
+    "id": "b210290b-81eb-4c6f-a16b-c061822efa43",
+    "conversation_id": "8b4a83f9-1b82-42d4-889d-7f72507cd4de",
+    "parent_id": "9f36b987-dead-4c01-8c60-1226da75a0cb",
+    "timestamp": "2026-08-23T17:55:04Z",
+    "author": "agent",
+    "user_prompt": "Validate the operation queue in the real TUI (issue #15)",
+    "model_name": "agent",
+    "model_cot": "\n\nContext Summary:\nFeature branch 15-file-operations-progress-indicator-2, uncommitted working tree. Automated coverage is queue_test.go (13 tests, run with -race); the TUI itself cannot be exercised non-interactively.</context_summary>\n<parameter name=\"reasoning\">User manually ran the app and queued three file copies in opposite directions (left->right and right->left) simultaneously. Reported working correctly.\n\nThis matters because it exercises exactly the paths no test covers, the TUI being non-interactive from a shell:\n  - serial dispatch through pumpQueue under multiple rapid enqueues, where the startedAt dispatch-marker guard is what prevents double-dispatch;\n  - opFinishedMsg reloading BOTH panes rather than just the active one, which is required precisely when queued operations target opposite directions (a copy right-to-left changes the left pane while the user's cursor is on the right);\n  - the bottom-right widget's \"+N\" pending count and its handoff from one running op to the next as the queue drains.\n\nNo code change resulted; recording it so a future session knows this path was verified by hand rather than assuming it is untested territory.</parameter>\n<parameter name=\"response\">Confirmed working by manual test. No changes made.",
+    "model_response": null,
+    "source_request_id": null
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "b210290b-81eb-4c6f-a16b-c061822efa43",
+      "git_commit_hash": "16ef8ce9fe3dda787fc9466d39bb0a56cfe8fafe",
+      "link_type": "temporal",
+      "linked_by": "meir.kanevskiy@gmail.com"
+    }
+  ]
+}

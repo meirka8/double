@@ -1,0 +1,24 @@
+{
+  "interaction": {
+    "id": "9f36b987-dead-4c01-8c60-1226da75a0cb",
+    "conversation_id": "8b4a83f9-1b82-42d4-889d-7f72507cd4de",
+    "parent_id": "5d75ec57-4b3f-4ff2-a73f-7563c58a694b",
+    "timestamp": "2026-08-23T17:31:38Z",
+    "author": "agent",
+    "user_prompt": "Implement the file-operation queue + bottom-right progress/ETA/speed indicator (issue #15)",
+    "model_name": "agent",
+    "model_cot": "\n\nContext Summary:\nNew queue.go + queue_test.go; modified commands.go, fs.go, keys.go, model.go, msg.go, styles.go, update.go, utils.go, view.go, CLAUDE.md, DOCUMENTATION.md. ~946 insertions. go build / go vet / gofmt / go test -race all clean. Not committed to git.</context_summary>\n<parameter name=\"reasoning\">Design decisions worth keeping, especially the ones that are non-obvious from reading the result:\n\n1. Progress is POLLED, not pushed. Workers write into atomic counters on fileOp; a 100ms progressTickMsg reads them. This is the deliberate inverse of the abandoned attempt's channel-per-chunk design (see thought 5d75ec57), which throttled disk I/O to UI framerate. Consequence: there is no progress channel anywhere in the codebase, and there should not be one.\n\n2. fileOp.run() is called directly from a tea.Cmd rather than from a hand-spawned goroutine. Bubble Tea already runs each command on its own goroutine, so the worker can block for the entire transfer and simply return opFinishedMsg. This removed the need for the prior attempt's waitForProgressMsg re-arming dance entirely.\n\n3. startedAt (a view-side field owned by Update) doubles as the dispatch marker, NOT opState. Ruled out using opState==opQueued for this: there is a window between Update handing runOpCmd to Bubble Tea and the worker goroutine storing opScanning, during which a second pumpQueue call would dispatch the same op twice. startedAt is written on the event loop, so it closes that window. TestQueueDispatchIsSerial pins this.\n\n4. Cancellation of a not-yet-dispatched op has to be done by Update (markCancelled), because no worker exists to observe the cancelled context and publish a terminal state. Cancelling a running op just calls op.cancel() and lets the worker publish.\n\n5. finish() writes err under the mutex BEFORE storing the terminal state, and snapshot() loads state BEFORE reading err. That ordering is what guarantees a reader never sees opFailed with a nil err. Reversing either half reintroduces the race.\n\n6. Cross-device move renames first and only scans+copies the sources that return EXDEV, so a same-filesystem move stays instant and never pays for a tree walk. The source is unlinked only after the copy lands, so a cancelled move cannot destroy the original (TestCancelMidCopyLeavesSourceIntact).\n\n7. Layout: the widget shares the hints row rather than adding a row — it renders exactly 3 lines, matching hintCardStyle's Padding(1,1) height, so none of the hardcoded pane-height arithmetic changed. Two rendering bugs were caught only by dumping actual output rather than reasoning about it: (a) queueView was 68 cols inside a 58-col pane and lipgloss.Place does not clip, so it silently spilled onto the other pane; (b) widgetOp originally fell back to \"newest queue entry\", which showed a merely-queued op while a failure went unseen. Both now have regression tests.\n\nAlso fixed while in here: the pre-existing dropped-files-on-conflict bug (conflict resolution moved to enqueue time, approved list accumulated), and a latent panic in statusBarView which sliced `status[:availableWidth]` with a possibly-negative index on a narrow terminal.\n\nKnown gap deliberately NOT addressed: quitting with operations in flight kills them mid-write, leaving partial files. Pre-existing (commands always ran on goroutines), but more reachable now that the queue makes long operations visible and the UI obviously stays usable. Flagged to the user rather than adding another modal unasked.</parameter>\n<parameter name=\"response\">Feature implemented and verified: build, vet, gofmt, and `go test -race` all pass. Left uncommitted for the user to review.",
+    "model_response": null,
+    "source_request_id": null
+  },
+  "context_items": [],
+  "tool_executions": [],
+  "artifact_links": [
+    {
+      "interaction_id": "9f36b987-dead-4c01-8c60-1226da75a0cb",
+      "git_commit_hash": "16ef8ce9fe3dda787fc9466d39bb0a56cfe8fafe",
+      "link_type": "temporal",
+      "linked_by": "meir.kanevskiy@gmail.com"
+    }
+  ]
+}
