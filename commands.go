@@ -6,13 +6,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/atotto/clipboard"
 	"github.com/aymanbagabas/go-osc52/v2"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// progressTickInterval is how often the progress widget refreshes while the
+// queue is busy. Fast enough to feel live, slow enough to stay off the CPU.
+const progressTickInterval = 100 * time.Millisecond
 
 // Commands
 func (p pane) loadDirectoryCmd(focusPath string) tea.Cmd {
@@ -37,88 +41,45 @@ func createFolderCmd(path string) tea.Cmd {
 	}
 }
 
-func deleteFileCmd(f file) tea.Cmd {
-	return deleteFilesCmd([]file{f})
-}
-
-func deleteFilesCmd(files []file) tea.Cmd {
+// probeConflictsCmd checks which of sourceFiles already exist at destPath.
+// It only looks — the actual work is queued afterwards — so that the user can
+// answer the overwrite prompt before anything starts, and so that files with no
+// conflict are never held hostage by the ones that do have a conflict.
+func probeConflictsCmd(sourceFiles []file, destPath string, moving bool) tea.Cmd {
 	return func() tea.Msg {
-		var errors []string
-		for _, f := range files {
-			var err error
-			if f.IsDir {
-				err = os.RemoveAll(f.Path)
-			} else {
-				err = os.Remove(f.Path)
-			}
-			if err != nil {
-				errors = append(errors, fmt.Sprintf("%s: %v", f.Name, err))
-			}
-		}
-		if len(errors) > 0 {
-			return fileDeletedMsg{err: fmt.Errorf("failed to delete: %s", strings.Join(errors, ", "))}
-		}
-		return fileDeletedMsg{err: nil}
-	}
-}
-
-func copyFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
-	return func() tea.Msg {
-		if !force {
-			var conflicts []fileConflict
-			for _, srcFile := range sourceFiles {
-				destFilePath := filepath.Join(destPath, srcFile.Name)
-				if _, err := os.Stat(destFilePath); !os.IsNotExist(err) {
-					conflicts = append(conflicts, fileConflict{Source: srcFile, Destination: destFilePath})
-				}
-			}
-			if len(conflicts) > 0 {
-				return fileConflictMsg{Conflicts: conflicts}
-			}
-		}
+		msg := conflictProbeMsg{dest: destPath, moving: moving}
 
 		for _, srcFile := range sourceFiles {
 			destFilePath := filepath.Join(destPath, srcFile.Name)
-			if srcFile.IsDir {
-				err := copyDir(srcFile.Path, destFilePath)
-				if err != nil {
-					return fileOperationMsg{err: fmt.Errorf("failed to copy directory %s: %w", srcFile.Name, err)}
-				}
+			if _, err := os.Stat(destFilePath); err == nil {
+				msg.conflicts = append(msg.conflicts, fileConflict{Source: srcFile, Destination: destFilePath})
+			} else if os.IsNotExist(err) {
+				msg.approved = append(msg.approved, srcFile)
 			} else {
-				err := copyFile(srcFile.Path, destFilePath)
-				if err != nil {
-					return fileOperationMsg{err: fmt.Errorf("failed to copy file %s: %w", srcFile.Name, err)}
-				}
+				msg.err = fmt.Errorf("checking %s: %w", destFilePath, err)
+				return msg
 			}
 		}
-		return fileOperationMsg{err: nil}
+		return msg
 	}
 }
 
-func moveFilesCmd(sourceFiles []file, destPath string, force bool) tea.Cmd {
+// runOpCmd executes a queued operation. Bubble Tea runs every command on its
+// own goroutine, so op.run() can block for the whole transfer; the UI keeps
+// moving because progress is published through op's atomics and picked up by
+// the progress tick, not by this command's return value.
+func runOpCmd(op *fileOp) tea.Cmd {
 	return func() tea.Msg {
-		if !force {
-			var conflicts []fileConflict
-			for _, srcFile := range sourceFiles {
-				destFilePath := filepath.Join(destPath, srcFile.Name)
-				if _, err := os.Stat(destFilePath); !os.IsNotExist(err) {
-					conflicts = append(conflicts, fileConflict{Source: srcFile, Destination: destFilePath})
-				}
-			}
-			if len(conflicts) > 0 {
-				return fileConflictMsg{Conflicts: conflicts}
-			}
-		}
-
-		for _, srcFile := range sourceFiles {
-			destFilePath := filepath.Join(destPath, srcFile.Name)
-			err := os.Rename(srcFile.Path, destFilePath)
-			if err != nil {
-				return fileOperationMsg{err: fmt.Errorf("failed to move %s: %w", srcFile.Name, err)}
-			}
-		}
-		return fileOperationMsg{err: nil}
+		op.run()
+		return opFinishedMsg{id: op.id}
 	}
+}
+
+// progressTickCmd schedules the next repaint of the progress widget.
+func progressTickCmd() tea.Cmd {
+	return tea.Tick(progressTickInterval, func(t time.Time) tea.Msg {
+		return progressTickMsg(t)
+	})
 }
 
 func previewFileCmd(path string) tea.Cmd {

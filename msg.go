@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 // Messages
 type directoryLoadedMsg struct {
 	paneID    int
@@ -17,17 +19,26 @@ type folderCreatedMsg struct {
 	folderPath string
 }
 
-type fileDeletedMsg struct {
-	err error
+// conflictProbeMsg reports the result of checking a copy/move destination
+// before anything is queued. Sources are split so that files with no conflict
+// can proceed regardless of how the user answers about the rest.
+type conflictProbeMsg struct {
+	approved  []file
+	conflicts []fileConflict
+	dest      string
+	moving    bool
+	err       error
 }
 
-type fileOperationMsg struct { // For copy/move
-	err error
+// opFinishedMsg is returned by the command that ran an operation to completion,
+// whatever its outcome; the outcome itself lives on the fileOp.
+type opFinishedMsg struct {
+	id int
 }
 
-type fileConflictMsg struct {
-	Conflicts []fileConflict
-}
+// progressTickMsg drives the periodic re-render of the progress widget while
+// the queue is busy.
+type progressTickMsg time.Time
 
 type previewReadyMsg struct {
 	Content string

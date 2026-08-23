@@ -3,9 +3,15 @@ package main
 import (
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// queueLinger is how long a finished operation stays on screen before the
+// progress widget clears itself. Failures are exempt: they wait to be dismissed
+// from the queue panel.
+const queueLinger = 3 * time.Second
 
 // ensureCursorInBounds validates and adjusts cursor position to be within file list bounds
 func ensureCursorInBounds(p *pane) {
@@ -18,28 +24,156 @@ func ensureCursorInBounds(p *pane) {
 	}
 }
 
-// Update handles messages and updates the model.
-func (m *model) processOverwriteConflicts() tea.Cmd {
-	if m.skipAll {
-		m.overwriteConflicts = nil // Skip all remaining
-	}
-
-	if len(m.overwriteConflicts) == 0 {
-		m.isConfirmingOverwrite = false
-		m.overwriteAll = false
-		m.skipAll = false
+// enqueueOp appends an operation to the queue and returns whatever commands are
+// needed to get it moving.
+func (m *model) enqueueOp(kind opKind, sources []file, destPath string) tea.Cmd {
+	if len(sources) == 0 {
 		return nil
 	}
+	op := newFileOp(m.nextOpID, kind, sources, destPath)
+	m.nextOpID++
+	m.queue = append(m.queue, op)
+	return m.pumpQueue()
+}
 
-	var filesToOperate []file
-	for _, conflict := range m.overwriteConflicts {
-		filesToOperate = append(filesToOperate, conflict.Source)
+// pumpQueue starts the next operation if nothing is running and makes sure the
+// progress tick is scheduled. It is the only place that dispatches work, which
+// is what keeps execution strictly serial.
+func (m *model) pumpQueue() tea.Cmd {
+	var cmds []tea.Cmd
+
+	if m.runningOp() == nil {
+		if next := m.nextQueuedOp(); next != nil {
+			next.startedAt = time.Now()
+			next.lastSample = next.startedAt
+			cmds = append(cmds, runOpCmd(next))
+		}
 	}
 
+	if !m.queueTicking && m.queueNeedsTick(time.Now()) {
+		m.queueTicking = true
+		cmds = append(cmds, progressTickCmd())
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// queueNeedsTick reports whether the progress widget still changes on its own.
+// A failed operation does not: it sits there until dismissed, and the frame
+// already on screen shows it, so there is nothing left to repaint.
+func (m model) queueNeedsTick(now time.Time) bool {
+	for _, op := range m.queue {
+		state := opState(op.state.Load())
+		if !state.terminal() {
+			return true
+		}
+		if state != opFailed && !op.finishedAt.IsZero() && now.Sub(op.finishedAt) <= queueLinger {
+			return true
+		}
+	}
+	return false
+}
+
+// sampleProgress refreshes the throughput estimate for the running operation.
+// Speed is an exponentially weighted moving average rather than a plain
+// total/elapsed average, so the figure follows the device slowing down or
+// speeding up instead of being anchored to how the transfer started.
+func (m *model) sampleProgress(now time.Time) {
+	op := m.runningOp()
+	if op == nil {
+		return
+	}
+
+	elapsed := now.Sub(op.lastSample).Seconds()
+	if elapsed <= 0 {
+		return
+	}
+
+	done := op.doneBytes.Load()
+	instant := float64(done-op.lastBytes) / elapsed
+	if instant < 0 {
+		// A cross-device move re-scans and resets doneBytes partway through.
+		instant = 0
+	}
+
+	const alpha = 0.3
+	if op.speed == 0 {
+		op.speed = instant
+	} else {
+		op.speed = alpha*instant + (1-alpha)*op.speed
+	}
+	op.lastBytes = done
+	op.lastSample = now
+}
+
+// pruneQueue drops finished operations once they have lingered long enough to
+// have been noticed. Failures stay until the user dismisses them.
+func (m *model) pruneQueue(now time.Time) {
+	kept := make([]*fileOp, 0, len(m.queue))
+	for _, op := range m.queue {
+		state := opState(op.state.Load())
+		expired := state.terminal() && state != opFailed &&
+			!op.finishedAt.IsZero() && now.Sub(op.finishedAt) > queueLinger
+		if !expired {
+			kept = append(kept, op)
+		}
+	}
+	m.queue = kept
+
+	if m.queueCursor >= len(m.queue) {
+		m.queueCursor = len(m.queue) - 1
+	}
+	if m.queueCursor < 0 {
+		m.queueCursor = 0
+	}
+}
+
+// queueOpAt returns the operation under the queue panel cursor, if any.
+func (m model) queueOpAt(i int) *fileOp {
+	if i < 0 || i >= len(m.queue) {
+		return nil
+	}
+	return m.queue[i]
+}
+
+// cancelOp stops an operation, whether or not it has started running.
+func (m *model) cancelOp(op *fileOp) {
+	if opState(op.state.Load()).terminal() {
+		return
+	}
+	if op.startedAt.IsZero() {
+		// Never dispatched, so no worker exists to observe the cancelled
+		// context and publish a terminal state. Update has to do it here.
+		op.markCancelled()
+		op.finishedAt = time.Now()
+		return
+	}
+	op.cancel()
+}
+
+// finishOverwritePrompt closes the overwrite prompt and queues everything the
+// user approved as a single operation.
+func (m *model) finishOverwritePrompt() tea.Cmd {
+	m.isConfirmingOverwrite = false
+	m.overwriteConflicts = nil
+
+	sources, dest := m.pendingApproved, m.pendingDest
+	m.pendingApproved, m.pendingDest = nil, ""
+
+	kind := opCopy
 	if m.isMoving {
-		return moveFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true)
+		kind = opMove
 	}
-	return copyFilesCmd(filesToOperate, filepath.Dir(m.overwriteConflicts[0].Destination), true)
+	return m.enqueueOp(kind, sources, dest)
+}
+
+// abandonOverwritePrompt cancels the whole pending operation, including the
+// files that had no conflict.
+func (m *model) abandonOverwritePrompt() {
+	m.isConfirmingOverwrite = false
+	m.overwriteConflicts = nil
+	m.pendingApproved = nil
+	m.pendingDest = ""
 }
 
 // Update handles messages and updates the model.
@@ -97,10 +231,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					activePane = &m.rightPane
 				}
 				m.isDeleting = false
-				cmd = deleteFilesCmd(m.filesToDelete)
+				files := m.filesToDelete
 				m.filesToDelete = nil                           // Clear files to delete
 				activePane.selected = make(map[string]struct{}) // Clear selection
-				return m, cmd
+				return m, m.enqueueOp(opDelete, files, "")
 			case "n", "N", "esc":
 				m.isDeleting = false
 				m.filesToDelete = nil // Clear files to delete
@@ -108,39 +242,89 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	} else if m.isConfirmingOverwrite {
+		if len(m.overwriteConflicts) == 0 {
+			// Nothing left to ask about; queue whatever was approved.
+			return m, m.finishOverwritePrompt()
+		}
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			switch msg.String() {
-			case "y", "Y":
-				// Overwrite the current file and process the rest
-				conflict := m.overwriteConflicts[0]
+			case "y", "Y": // Overwrite this one
+				m.pendingApproved = append(m.pendingApproved, m.overwriteConflicts[0].Source)
 				m.overwriteConflicts = m.overwriteConflicts[1:]
-				var operationCmd tea.Cmd
-				if m.isMoving {
-					operationCmd = moveFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true)
-				} else {
-					operationCmd = copyFilesCmd([]file{conflict.Source}, filepath.Dir(conflict.Destination), true)
+				if len(m.overwriteConflicts) == 0 {
+					return m, m.finishOverwritePrompt()
 				}
-				return m, tea.Sequence(operationCmd, m.processOverwriteConflicts())
+				return m, nil
 
-			case "n", "N":
-				// Skip the current file and process the rest
+			case "n", "N": // Skip this one
 				m.overwriteConflicts = m.overwriteConflicts[1:]
-				return m, m.processOverwriteConflicts()
+				if len(m.overwriteConflicts) == 0 {
+					return m, m.finishOverwritePrompt()
+				}
+				return m, nil
 
-			case "a", "A":
-				m.overwriteAll = true
-				return m, m.processOverwriteConflicts()
+			case "a", "A": // Overwrite all remaining
+				for _, conflict := range m.overwriteConflicts {
+					m.pendingApproved = append(m.pendingApproved, conflict.Source)
+				}
+				return m, m.finishOverwritePrompt()
 
-			case "s", "S": // Skip All
-				m.skipAll = true
-				return m, m.processOverwriteConflicts()
+			case "s", "S": // Skip all remaining
+				return m, m.finishOverwritePrompt()
 
-			case "esc":
-				m.isConfirmingOverwrite = false
-				m.overwriteConflicts = nil
-				m.overwriteAll = false
-				m.skipAll = false
+			case "esc": // Abandon the operation entirely
+				m.abandonOverwritePrompt()
+				return m, nil
+			}
+		}
+	} else if m.isQueueOpen {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "esc", "q", m.keyMap.Queue.Key:
+				m.isQueueOpen = false
+				return m, nil
+			case "up", "k":
+				if m.queueCursor > 0 {
+					m.queueCursor--
+				}
+				return m, nil
+			case "down", "j":
+				if m.queueCursor < len(m.queue)-1 {
+					m.queueCursor++
+				}
+				return m, nil
+			case "home":
+				m.queueCursor = 0
+				return m, nil
+			case "end":
+				if len(m.queue) > 0 {
+					m.queueCursor = len(m.queue) - 1
+				}
+				return m, nil
+			case "c", "C", "delete": // Cancel the highlighted operation
+				if op := m.queueOpAt(m.queueCursor); op != nil {
+					m.cancelOp(op)
+					return m, m.pumpQueue()
+				}
+				return m, nil
+			case "x", "X": // Dismiss a finished entry
+				if op := m.queueOpAt(m.queueCursor); op != nil && opState(op.state.Load()).terminal() {
+					kept := make([]*fileOp, 0, len(m.queue))
+					for _, other := range m.queue {
+						if other.id != op.id {
+							kept = append(kept, other)
+						}
+					}
+					m.queue = kept
+					if m.queueCursor >= len(m.queue) {
+						m.queueCursor = len(m.queue) - 1
+					}
+					if m.queueCursor < 0 {
+						m.queueCursor = 0
+					}
+				}
 				return m, nil
 			}
 		}
@@ -361,9 +545,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					files = []file{sourcePane.files[sourcePane.cursor]}
 				}
 				if len(files) > 0 {
-					m.isMoving = false                              // It's a copy operation
 					sourcePane.selected = make(map[string]struct{}) // Clear selection
-					return m, copyFilesCmd(files, destPane.path, false)
+					return m, probeConflictsCmd(files, destPane.path, false)
 				}
 				return m, nil
 			case m.keyMap.Move.Key: // Move
@@ -378,9 +561,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					files = []file{sourcePane.files[sourcePane.cursor]}
 				}
 				if len(files) > 0 {
-					m.isMoving = true                               // It's a move operation
 					sourcePane.selected = make(map[string]struct{}) // Clear selection
-					return m, moveFilesCmd(files, destPane.path, false)
+					return m, probeConflictsCmd(files, destPane.path, true)
 				}
 				return m, nil
 			case m.keyMap.NewFolder.Key: // New Folder
@@ -420,6 +602,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case m.keyMap.Favorites.Key:
 				m.isFavoritesOpen = true
 				m.favoritesCursor = 0
+				return m, nil
+			case m.keyMap.Queue.Key:
+				m.isQueueOpen = true
+				m.queueCursor = 0
 				return m, nil
 			case m.keyMap.AddToFavorites.Key:
 				activePane := &m.leftPane
@@ -538,6 +724,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Total subtraction: 6.
 		paneHeight = msg.Height - 6
 		paneWidth := msg.Width/2 - 2
+		m.width = msg.Width
+		m.height = msg.Height
 		m.leftPane.height = paneHeight
 		m.rightPane.height = paneHeight
 		m.leftPane.width = paneWidth
@@ -560,38 +748,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case fileDeletedMsg:
+	case conflictProbeMsg:
 		if msg.err != nil {
 			m.err = msg.err
-		} else {
-			// Adjust cursor if it's out of bounds after deletion
-			activePane := &m.leftPane
-			if m.rightPane.active {
-				activePane = &m.rightPane
-			}
-			if activePane.cursor >= len(activePane.files)-1 && activePane.cursor > 0 {
-				activePane.cursor--
-			}
-
-			// Reload directory in active pane
-			if m.leftPane.active {
-				return m, m.leftPane.loadDirectoryCmd("")
-			} else {
-				return m, m.rightPane.loadDirectoryCmd("")
-			}
+			return m, nil
 		}
-		return m, nil
-	case fileConflictMsg:
+		m.isMoving = msg.moving
+		m.pendingDest = msg.dest
+		m.pendingApproved = msg.approved
+		if len(msg.conflicts) == 0 {
+			// Nothing to ask about; queue it straight away.
+			return m, m.finishOverwritePrompt()
+		}
+		m.overwriteConflicts = msg.conflicts
 		m.isConfirmingOverwrite = true
-		m.overwriteConflicts = msg.Conflicts
 		return m, nil
-	case fileOperationMsg: // For copy/move operations
-		if msg.err != nil {
-			m.err = msg.err
-		} else {
-			// Reload both source and destination panes
-			cmds := []tea.Cmd{m.leftPane.loadDirectoryCmd(""), m.rightPane.loadDirectoryCmd("")}
-			return m, tea.Batch(cmds...)
+	case opFinishedMsg:
+		now := time.Now()
+		for _, op := range m.queue {
+			if op.id != msg.id {
+				continue
+			}
+			op.finishedAt = now
+			if opState(op.state.Load()) == opFailed {
+				m.err = op.snapshot().err
+			}
+			break
+		}
+		// Either pane can be the source or the destination, so refresh both.
+		return m, tea.Batch(
+			m.leftPane.loadDirectoryCmd(""),
+			m.rightPane.loadDirectoryCmd(""),
+			m.pumpQueue(),
+		)
+	case progressTickMsg:
+		now := time.Time(msg)
+		m.queueTicking = false
+		m.sampleProgress(now)
+		m.pruneQueue(now)
+		if m.queueNeedsTick(now) {
+			m.queueTicking = true
+			return m, progressTickCmd()
 		}
 		return m, nil
 	case driveUnmountedMsg:
@@ -617,7 +814,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Delegate updates to active pane only if not in an operation mode
-	if !m.isCreatingFolder && !m.isDeleting && !m.isConfirmingOverwrite && !m.isPreviewing {
+	if !m.isCreatingFolder && !m.isDeleting && !m.isConfirmingOverwrite && !m.isPreviewing && !m.isQueueOpen {
 		if m.leftPane.active {
 			m.leftPane, cmd = m.leftPane.update(msg)
 		} else {
