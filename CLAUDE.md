@@ -23,11 +23,20 @@ gofmt -l .            # check formatting (no test suite exists in this repo)
 
 There are no `_test.go` files currently, so there is no `go test` suite to run.
 
+`go run .` takes over the terminal (alt screen + raw keyboard input) and only exits on a
+key press, so it is not useful from a non-interactive shell — it will just hang. Verify
+changes with `go build .` / `go vet ./...` and leave actually running the TUI to the user.
+
 ## Architecture
 
 The app follows Bubble Tea's Model-View-Update (MVU) pattern, split across files by
 responsibility rather than by feature:
 
+- `main.go` — tiny entrypoint, but it does one load-bearing thing: it writes the Kitty
+  keyboard protocol enable/disable sequences (`\x1b[>15u` / `\x1b[<u`) around the Bubble Tea
+  program. That protocol is what lets the terminal report `alt+<letter>` as a distinct key
+  event, so the entire `alt`-based keymap depends on it; in a terminal without Kitty protocol
+  support those bindings degrade and only the F-key aliases work.
 - `model.go` — the `model` struct (whole app state) and `pane` struct (one of the two
   directory panes: path, files, cursor, viewport, selection, search query). `initialModel()`
   builds the starting state; `Init()` kicks off the initial directory loads for both panes.
@@ -49,11 +58,13 @@ responsibility rather than by feature:
   first, injects a synthetic `..` entry), recursive `copyFile`/`copyDir`, `getMountedDrives`
   (parses `/proc/mounts`, filters to `/media`, `/mnt`, `/run/media`), `getStandardPaths` (home
   + XDG-style user dirs for the favorites list).
-- `keys.go` — `KeyMap`/`Shortcut`: every action has a canonical `alt+<letter>` binding plus an
-  optional F-key alias. `GetAliasMap()` maps F-key aliases back to their canonical key string;
-  `Update` resolves incoming key events through this map before switching on `m.keyMap.X.Key`,
-  so a new shortcut must be added to `KeyMap` (and `GetShortcuts()`) rather than matched as a
-  raw string.
+- `keys.go` — `KeyMap`/`Shortcut`: most actions have a canonical `alt+<letter>` binding plus an
+  optional F-key alias, though a few are bare keys (`tab` switch pane, `insert` toggle
+  selection, `ctrl+c` force quit). `GetAliasMap()` maps F-key aliases back to their canonical
+  key string; `Update` resolves incoming key events through this map before switching on
+  `m.keyMap.X.Key`, so a new shortcut must be added to `KeyMap` (and `GetShortcuts()`) rather
+  than matched as a raw string. `GetShortcuts()` also drives the hints bar, so omitting a new
+  shortcut there silently hides it from the UI.
 - `view.go` — `View()` and the render helpers for the two panes, status bar, hints bar, and the
   full-screen preview/favorites overlays. Overlays replace one or both panes rather than
   layering on top.
@@ -77,6 +88,37 @@ responsibility rather than by feature:
 - Modal UI state (creating folder, deleting, confirming overwrite, favorites panel, preview) is
   mutually exclusive; when adding a new modal, add a branch to the mode chain at the top of
   `Update` and make sure it returns before falling through to normal pane key handling.
+- The modal flags are listed in **two** places that must be kept in sync: the mode chain at the
+  top of `Update`, and the delegation guard near the bottom (`if !m.isCreatingFolder && ...`)
+  that decides whether the message still reaches `pane.update()`. Note `isFavoritesOpen` is
+  absent from that guard today, so favorites keys that don't `return` early (arrows, `home`,
+  `end`) also move the underlying pane's cursor. Keep this in mind before "fixing" one half.
+- Active search is the `default` branch of `pane.update()`: any unhandled single-rune key is
+  appended to `pane.searchQuery`, which then does a prefix match first and falls back to
+  `fuzzyMatch`. Consequence: a new bare single-letter keybinding at the pane level will be
+  swallowed by search — new actions should go through `KeyMap` (which is resolved earlier, in
+  `Update`) instead. Navigation keys and `esc` clear the query.
+- Layout arithmetic is hardcoded and duplicated. `tea.WindowSizeMsg` sets
+  `paneHeight = msg.Height - 6` (status bar + hints + borders) and `paneWidth = msg.Width/2 - 2`;
+  `paneView` renders `p.height-2` rows; preview inner dimensions (`previewWidth-6`,
+  `previewHeight-4`) are recomputed in `view.go` *and* at four scroll-clamping sites in
+  `update.go`. Changing any chrome means updating all of these together.
+- `Update`, `View`, and `pane.update` use **value** receivers and return the mutated copy —
+  only helpers like `processOverwriteConflicts` (`*model`) and `ensureCursorInBounds` (`*pane`)
+  mutate in place. Inside `Update`, taking `activePane := &m.leftPane` works because `m` is the
+  local copy that gets returned.
+- `m.modifierState` is currently dead state: the modifier-tracking code at the top of `Update`
+  is commented out, so nothing ever sets it. `hintsView` therefore always renders the `alt`
+  group with the Alt chip inactive.
+
+## Docs and workflow
+
+- `DOCUMENTATION.md` is a hand-written feature doc that has drifted from the code — it predates
+  favorites, sync panes, and open-in-other, and it lists selection as `Alt+I`/`Ctrl+I` when the
+  actual binding is `insert` (`alt+i` is Sync Panes). Treat `keys.go` as the source of truth for
+  bindings, and update `DOCUMENTATION.md` when changing user-facing behavior.
+- Work happens on branches named `<issue-number>-<slug>` (e.g. `15-file-operations-progress-indicator-2`)
+  cut from `main` and merged back via GitHub PRs.
 
 ## CVC (Continuity/Version Context) MCP
 
